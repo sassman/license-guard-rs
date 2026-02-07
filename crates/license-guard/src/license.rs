@@ -66,6 +66,43 @@ impl LicenseFile {
         }
     }
 
+    /// Decode a license from a base64-encoded string.
+    ///
+    /// Use this when the user pastes a license key into a text field.
+    /// The base64 content may be JSON or compact format underneath.
+    /// Whitespace around the input is trimmed.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use license_guard::{LicenseFile, LicenseVerifier};
+    ///
+    /// let user_input = "eyJwYXlsb2FkIjoi..."; // pasted from email/UI
+    /// let license = LicenseFile::from_base64(user_input)?;
+    ///
+    /// // validate before persisting
+    /// let verifier = LicenseVerifier::from_hex(public_key)?;
+    /// let payload = verifier.verify_active(&serde_json::to_string(&license)?)?;
+    ///
+    /// // now safe to save
+    /// std::fs::write("license.json", serde_json::to_string(&license)?)?;
+    /// ```
+    pub fn from_base64(encoded: &str) -> Result<Self, crate::LicenseError> {
+        use base64::prelude::*;
+        let decoded = BASE64_STANDARD
+            .decode(encoded.trim().as_bytes())
+            .map_err(|e| crate::LicenseError::InvalidFormat(e.to_string()))?;
+        let text = String::from_utf8(decoded)
+            .map_err(|e| crate::LicenseError::InvalidFormat(e.to_string()))?;
+        let trimmed = text.trim();
+        if trimmed.starts_with('{') {
+            Ok(serde_json::from_str(trimmed)?)
+        } else {
+            Self::from_compact(trimmed)
+                .map_err(|e| crate::LicenseError::InvalidFormat(e.to_string()))
+        }
+    }
+
     /// Parse from compact format: `payload.signature`
     pub fn from_compact(s: &str) -> Result<Self, &'static str> {
         let parts: Vec<&str> = s.trim().split('.').collect();

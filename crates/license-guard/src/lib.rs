@@ -210,4 +210,91 @@ mod tests {
 
         std::fs::remove_file(&tmp).ok();
     }
+
+    #[test]
+    fn test_from_base64_json() {
+        use base64::prelude::*;
+
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "b64@test.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec!["pro".into()],
+            meta: Default::default(),
+        };
+
+        let license_file = sign_payload(&signing_key, &payload);
+        let json = serde_json::to_string(&license_file).unwrap();
+        let encoded = BASE64_STANDARD.encode(json.as_bytes());
+
+        let loaded = LicenseFile::from_base64(&encoded).unwrap();
+        let license_json = serde_json::to_string(&loaded).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "b64@test.com");
+    }
+
+    #[test]
+    fn test_from_base64_compact() {
+        use base64::prelude::*;
+
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "b64compact@test.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec![],
+            meta: Default::default(),
+        };
+
+        let license_file = sign_payload(&signing_key, &payload);
+        let compact = license_file.to_compact();
+        let encoded = BASE64_STANDARD.encode(compact.as_bytes());
+
+        let loaded = LicenseFile::from_base64(&encoded).unwrap();
+        let license_json = serde_json::to_string(&loaded).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "b64compact@test.com");
+    }
+
+    #[test]
+    fn test_from_base64_with_whitespace() {
+        use base64::prelude::*;
+
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "ws@test.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec![],
+            meta: Default::default(),
+        };
+
+        let license_file = sign_payload(&signing_key, &payload);
+        let json = serde_json::to_string(&license_file).unwrap();
+        let encoded = format!("  {} \n", BASE64_STANDARD.encode(json.as_bytes()));
+
+        let loaded = LicenseFile::from_base64(&encoded).unwrap();
+        let license_json = serde_json::to_string(&loaded).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "ws@test.com");
+    }
+
+    #[test]
+    fn test_from_base64_invalid() {
+        let result = LicenseFile::from_base64("not-valid-base64!!!");
+        assert!(result.is_err());
+    }
 }
