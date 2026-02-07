@@ -1,34 +1,90 @@
 //! Offline license validation using Ed25519 signatures.
 //!
-//! # Quick Start
+//! `license-guard` lets you gate features behind cryptographically signed
+//! licenses — no server, no phone-home, no runtime dependency beyond the
+//! binary itself. Licenses are generated with the
+//! [`license-forge`](https://crates.io/crates/license-forge) CLI.
+//!
+//! # Getting Started
+//!
+//! **1. Generate a keypair** (one-time, with `license-forge`):
+//!
+//! ```bash,ignore
+//! license-forge init my-product
+//! ```
+//!
+//! **2. Embed the public key** and check licenses at runtime:
 //!
 //! ```rust,ignore
 //! use license_guard::global;
 //!
-//! // 1. Initialize once at startup
+//! // Initialize once at startup with your public key
 //! global::init("your_public_key_hex")?;
 //!
-//! // 2. Activate when user enters license
+//! // Activate when the user enters a license
 //! global::activate(license_data)?;
 //!
-//! // 3. Check entitlements anywhere in your code
+//! // Check entitlements anywhere — no context passing needed
 //! if global::has("premium") {
-//!     // premium feature
+//!     // unlock premium feature
 //! }
 //! ```
 //!
+//! **3. Issue licenses** to users (with `license-forge`):
+//!
+//! ```bash,ignore
+//! license-forge generate --sub "user@example.com" --ent premium
+//! ```
+//!
+//! # Use Cases
+//!
+//! - **Desktop app with feature gating** — embed the public key, call
+//!   [`global::init`] at startup, and sprinkle [`global::has`] checks
+//!   wherever you need to gate features.
+//! - **CLI tool with premium commands** — check entitlements before
+//!   executing paid sub-commands; free commands work without a license.
+//! - **Library with tiered API access** — use [`LicenseVerifier`] directly
+//!   so callers can supply their own keys and license data.
+//!
 //! # Choosing an API
 //!
-//! | Use case | API |
-//! |----------|-----|
-//! | Most apps | [`global`] module - no context passing |
-//! | Multiple products | [`LicenseVerifier`] - one per product |
-//! | Testing | [`LicenseVerifier`] - no global state |
+//! | Scenario | API | Why |
+//! |----------|-----|-----|
+//! | Most apps (single product) | [`global`] module | No context passing, init-once |
+//! | Multiple products / tenants | [`LicenseVerifier`] | One instance per product |
+//! | Unit tests | [`LicenseVerifier`] or [`global::LicenseState`] | No global state |
+//!
+//! # Loading Licenses
+//!
+//! | Source | Method |
+//! |--------|--------|
+//! | File on disk | [`LicenseFile::from_path`] — auto-detects JSON / compact |
+//! | User text input (base64) | [`LicenseFile::from_base64`] — for paste-in license keys |
+//! | Raw JSON or compact string | [`LicenseVerifier::verify_auto`] — auto-detects format |
+//!
+//! # Error Handling
+//!
+//! All fallible operations return [`LicenseError`]. Match on variants to
+//! give users actionable feedback:
+//!
+//! ```rust,ignore
+//! use license_guard::LicenseError;
+//!
+//! match verifier.verify_active(license_data) {
+//!     Ok(payload) => println!("Licensed to {}", payload.sub),
+//!     Err(LicenseError::InvalidSignature) => eprintln!("License is invalid"),
+//!     Err(LicenseError::Expired(_)) => eprintln!("License has expired"),
+//!     Err(LicenseError::MissingEntitlement(e)) => eprintln!("Missing: {e}"),
+//!     Err(e) => eprintln!("License error: {e}"),
+//! }
+//! ```
 //!
 //! # Generating Licenses
 //!
-//! Use the `license-forge` CLI tool to generate keypairs and sign licenses.
-//! See the repository README for details.
+//! Use the [`license-forge`](https://crates.io/crates/license-forge) CLI
+//! to generate Ed25519 keypairs and sign licenses. See the
+//! [integration example](https://github.com/sassman/license-guard-rs/blob/main/crates/license-guard/examples/integration.rs)
+//! for a full walkthrough.
 
 mod error;
 mod license;
