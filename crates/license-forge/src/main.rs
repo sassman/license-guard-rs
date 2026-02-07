@@ -1,3 +1,5 @@
+mod product;
+
 use base64::prelude::*;
 use base64::Engine;
 use chrono::{NaiveDate, Utc};
@@ -5,6 +7,7 @@ use clap::{Parser, Subcommand};
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 use ed25519_dalek::{Signer, SigningKey};
 use license_guard::{LicenseFile, LicensePayload};
+use product::Product;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -18,6 +21,9 @@ struct Profile {
     product: String,
     /// Available entitlements for this product
     entitlements: Vec<String>,
+    /// Path to private key file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key: Option<String>,
 }
 
 impl Profile {
@@ -78,9 +84,9 @@ enum Commands {
     },
     /// Generate a new license (interactive)
     Generate {
-        /// Path to private key file
+        /// Path to private key file (can be saved in profile)
         #[arg(short, long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Load product profile
         #[arg(short, long)]
         profile: Option<String>,
@@ -144,17 +150,28 @@ fn keygen(output: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn generate(key_path: PathBuf, profile_name: Option<String>, output: Option<PathBuf>) -> anyhow::Result<()> {
+fn generate(key_arg: Option<PathBuf>, profile_name: Option<String>, output: Option<PathBuf>) -> anyhow::Result<()> {
+    println!("License Generator\n");
+
+    // Load or create profile
+    let (mut profile, profile_path) = load_or_create_profile(profile_name)?;
+
+    // Determine key path: CLI argument takes precedence over profile
+    let key_path = if let Some(k) = key_arg {
+        // CLI provided, update profile with portable path
+        profile.key = Some(collapse_home(&k));
+        k
+    } else if let Some(ref k) = profile.key {
+        expand_home(k)
+    } else {
+        anyhow::bail!("No key provided. Use --key <path> or save a key in the profile.");
+    };
+
     // Load private key
     let sk_hex = fs::read_to_string(&key_path)?;
     let sk_bytes = hex::decode(sk_hex.trim())?;
     let sk_bytes: [u8; 32] = sk_bytes.try_into().map_err(|_| anyhow::anyhow!("invalid key"))?;
     let signing_key = SigningKey::from_bytes(&sk_bytes);
-
-    println!("License Generator\n");
-
-    // Load or create profile
-    let (profile, profile_path) = load_or_create_profile(profile_name)?;
 
     // Collect license info via dialoguer
     let sub: String = Input::new()
@@ -267,12 +284,13 @@ fn generate(key_path: PathBuf, profile_name: Option<String>, output: Option<Path
     if let Some(path) = profile_path {
         if !path.exists() {
             let save = Confirm::new()
-                .with_prompt(format!("Save profile to {}?", path.display()))
+                .with_prompt(format!("Save profile to {}?", display_path(&path)))
                 .default(true)
                 .interact()?;
             if save {
                 profile.save(&path)?;
-                println!("Profile saved.");
+                println!("\nProfile saved to: {}", display_path(&path));
+                println!("Next time run: license-forge generate --profile {}", profile.product);
             }
         }
     }
@@ -289,6 +307,9 @@ fn load_or_create_profile(profile_name: Option<String>) -> anyhow::Result<(Profi
         if path.exists() {
             let profile = Profile::load(&path)?;
             println!("Loaded profile: {} ({})", name, profile.product);
+            if let Some(ref key) = profile.key {
+                println!("  Key: {}", key);
+            }
             println!("  Entitlements: {:?}\n", profile.entitlements);
             return Ok((profile, Some(path)));
         } else {
@@ -312,6 +333,9 @@ fn load_or_create_profile(profile_name: Option<String>) -> anyhow::Result<(Profi
             let path = Profile::profiles_dir().join(format!("{}.toml", name));
             let profile = Profile::load(&path)?;
             println!("Loaded profile: {} ({})", name, profile.product);
+            if let Some(ref key) = profile.key {
+                println!("  Key: {}", key);
+            }
             println!("  Entitlements: {:?}\n", profile.entitlements);
             return Ok((profile, Some(path)));
         }
@@ -337,7 +361,7 @@ fn load_or_create_profile(profile_name: Option<String>) -> anyhow::Result<(Profi
         entitlements.push(ent);
     }
 
-    let profile = Profile { product: product.clone(), entitlements };
+    let profile = Profile { product: product.clone(), entitlements, key: None };
     let path = Profile::profiles_dir().join(format!("{}.toml", product));
 
     println!();
@@ -395,15 +419,18 @@ fn list_profiles() -> anyhow::Result<()> {
     let profiles = Profile::list_profiles();
     if profiles.is_empty() {
         println!("No profiles found.");
-        println!("Profiles are stored in: {}", Profile::profiles_dir().display());
+        println!("Profiles are stored in: {}", display_path(&Profile::profiles_dir()));
     } else {
         println!("Available profiles:\n");
         for name in profiles {
             let path = Profile::profiles_dir().join(format!("{}.toml", name));
             if let Ok(profile) = Profile::load(&path) {
-                println!("  {} - {} entitlements: {:?}", name, profile.product, profile.entitlements);
+                let key_info = profile.key.as_ref().map(|k| format!(" key={}", k)).unwrap_or_default();
+                println!("  {} - {}{} entitlements: {:?}", name, profile.product, key_info, profile.entitlements);
+                println!("    {}\n", display_path(&path));
             } else {
                 println!("  {} (error loading)", name);
+                println!("    {}\n", display_path(&path));
             }
         }
     }
@@ -414,4 +441,34 @@ fn format_timestamp(ts: u64) -> String {
     chrono::DateTime::from_timestamp(ts as i64, 0)
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
         .unwrap_or_else(|| "invalid".into())
+}
+
+/// Format path with ~ for home directory (more readable)
+fn display_path(path: &PathBuf) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(suffix) = path.strip_prefix(&home) {
+            return format!("~/{}", suffix.display());
+        }
+    }
+    path.display().to_string()
+}
+
+/// Collapse home directory to $HOME for portable storage
+fn collapse_home(path: &PathBuf) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(suffix) = path.strip_prefix(&home) {
+            return format!("$HOME/{}", suffix.display());
+        }
+    }
+    path.display().to_string()
+}
+
+/// Expand $HOME in path string to actual home directory
+fn expand_home(path: &str) -> PathBuf {
+    if path.starts_with("$HOME/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(&path[6..]);
+        }
+    }
+    PathBuf::from(path)
 }
