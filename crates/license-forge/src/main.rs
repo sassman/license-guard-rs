@@ -2,7 +2,7 @@ mod product;
 
 use base64::prelude::*;
 use chrono::{NaiveDate, Utc};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use dialoguer::{Confirm, Input, MultiSelect};
 use ed25519_dalek::Signer;
 use license_guard::{LicenseFile, LicensePayload};
@@ -40,6 +40,12 @@ enum Commands {
     Verify {
         /// License file to verify (filename or path)
         license: String,
+    },
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
     },
 }
 
@@ -94,6 +100,11 @@ fn main() -> anyhow::Result<()> {
         },
         Commands::Show => show(&cli.product),
         Commands::Verify { license } => verify(&cli.product, &license),
+        Commands::Completions { shell } => {
+            let mut cmd = Cli::command();
+            clap_complete::generate(shell, &mut cmd, "license-forge", &mut std::io::stdout());
+            Ok(())
+        }
     }
 }
 
