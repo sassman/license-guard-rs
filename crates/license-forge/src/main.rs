@@ -97,8 +97,95 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn product_add(_name: Option<String>) -> anyhow::Result<()> {
-    todo!("product_add")
+fn product_add(name: Option<String>) -> anyhow::Result<()> {
+    // Get product name
+    let product_name = if let Some(n) = name {
+        n
+    } else {
+        Input::new()
+            .with_prompt("Product name (used as directory name)")
+            .interact_text()?
+    };
+
+    // Check if already exists
+    if Product::exists(&product_name) {
+        if Product::has_keys(&product_name) {
+            let replace = Confirm::new()
+                .with_prompt(format!(
+                    "Product '{}' already has keys. Replace them? (old keys will be backed up)",
+                    product_name
+                ))
+                .default(false)
+                .interact()?;
+
+            if !replace {
+                println!("Aborted.");
+                return Ok(());
+            }
+            Product::backup_keys(&product_name)?;
+            println!("Existing keys backed up.\n");
+        }
+    }
+
+    println!("\nConfiguring product '{}'...\n", product_name);
+
+    // Get product display name
+    let display_name: String = Input::new()
+        .with_prompt("Product identifier (appears in licenses)")
+        .default(product_name.clone())
+        .interact_text()?;
+
+    // Get entitlements
+    println!("\nEnter entitlements (empty line to finish):");
+    let mut entitlements = Vec::new();
+    loop {
+        let ent: String = Input::new()
+            .with_prompt(format!("  Entitlement {}", entitlements.len() + 1))
+            .allow_empty(true)
+            .interact_text()?;
+        if ent.is_empty() {
+            break;
+        }
+        entitlements.push(ent);
+    }
+
+    // Create and save product
+    let product = Product {
+        name: display_name,
+        entitlements,
+    };
+    product.save(&product_name)?;
+
+    // Generate keys
+    println!("\nGenerating keys...");
+    let (_, pk_hex) = Product::generate_keys(&product_name)?;
+
+    // Show summary
+    let dir = Product::dir(&product_name);
+    println!("\n Product '{}' created successfully!\n", product_name);
+    println!("  Directory:   {}", Product::display_path(&dir));
+    println!(
+        "  Config:      {}",
+        Product::display_path(&Product::config_path(&product_name))
+    );
+    println!(
+        "  Private key: {}",
+        Product::display_path(&Product::private_key_path(&product_name))
+    );
+    println!(
+        "  Public key:  {}",
+        Product::display_path(&Product::public_key_path(&product_name))
+    );
+    println!("\n  Public key (for embedding in your app):");
+    println!("  {}\n", pk_hex);
+
+    if product_name != "default" {
+        println!("  Use with: license-forge -p {} license add", product_name);
+    } else {
+        println!("  Use with: license-forge license add");
+    }
+
+    Ok(())
 }
 
 fn product_list() -> anyhow::Result<()> {
