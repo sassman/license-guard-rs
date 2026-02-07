@@ -514,12 +514,118 @@ fn license_list(product_name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn license_expire(_product: &str, _license: &str) -> anyhow::Result<()> {
-    todo!("license_expire")
+/// Backup a license file with timestamp
+fn backup_license(product_name: &str, license_name: &str) -> anyhow::Result<()> {
+    let license_path = resolve_license_path(product_name, license_name)?;
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let backup_name = format!(
+        "{}.{}.bak",
+        license_path.file_stem().unwrap().to_string_lossy(),
+        timestamp
+    );
+    let backup_path = license_path.parent().unwrap().join(backup_name);
+    fs::copy(&license_path, &backup_path)?;
+    println!("  Backed up to: {}", Product::display_path(&backup_path));
+    Ok(())
 }
 
-fn license_renew(_product: &str, _license: &str) -> anyhow::Result<()> {
-    todo!("license_renew")
+/// Resolve license name to full path (handles both filename and full path)
+fn resolve_license_path(
+    product_name: &str,
+    license_name: &str,
+) -> anyhow::Result<std::path::PathBuf> {
+    let path = std::path::PathBuf::from(license_name);
+
+    // If it's already a valid path, use it
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Otherwise, look in the product's licenses directory
+    let licenses_dir = Product::licenses_dir(product_name);
+    let license_path = if license_name.ends_with(".lic") {
+        licenses_dir.join(license_name)
+    } else {
+        licenses_dir.join(format!("{}.lic", license_name))
+    };
+
+    if license_path.exists() {
+        Ok(license_path)
+    } else {
+        anyhow::bail!("License '{}' not found", license_name)
+    }
+}
+
+/// Load, modify, re-sign, and save a license
+fn modify_license<F>(product_name: &str, license_name: &str, modifier: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut LicensePayload) -> anyhow::Result<()>,
+{
+    let license_path = resolve_license_path(product_name, license_name)?;
+    let signing_key = Product::load_signing_key(product_name)?;
+
+    // Read and parse
+    let content = fs::read_to_string(&license_path)?;
+    let license_file: LicenseFile = serde_json::from_str(&content)?;
+    let payload_bytes = BASE64_STANDARD.decode(&license_file.payload)?;
+    let mut payload: LicensePayload = serde_json::from_slice(&payload_bytes)?;
+
+    // Apply modification
+    modifier(&mut payload)?;
+
+    // Re-sign
+    let payload_json = serde_json::to_string(&payload)?;
+    let signature = signing_key.sign(payload_json.as_bytes());
+
+    let new_license = LicenseFile {
+        payload: BASE64_STANDARD.encode(payload_json.as_bytes()),
+        sig: BASE64_STANDARD.encode(signature.to_bytes()),
+    };
+
+    // Save
+    fs::write(&license_path, serde_json::to_string_pretty(&new_license)?)?;
+
+    Ok(())
+}
+
+fn license_expire(product_name: &str, license_name: &str) -> anyhow::Result<()> {
+    let product_name = ensure_product_exists(product_name)?;
+
+    println!("Expiring license: {}\n", license_name);
+    backup_license(&product_name, license_name)?;
+
+    let now = Utc::now().timestamp() as u64;
+    modify_license(&product_name, license_name, |payload| {
+        payload.exp = Some(now.saturating_sub(1)); // Set to 1 second ago
+        Ok(())
+    })?;
+
+    println!("\n License expired successfully.");
+    Ok(())
+}
+
+fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
+    let product_name = ensure_product_exists(product_name)?;
+
+    println!("Renewing license: {}\n", license_name);
+
+    let date_str: String = Input::new()
+        .with_prompt("New expiration date (YYYY-MM-DD)")
+        .interact_text()?;
+
+    let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")?;
+    let datetime = date.and_hms_opt(23, 59, 59).unwrap();
+    let new_exp = datetime.and_utc().timestamp() as u64;
+
+    backup_license(&product_name, license_name)?;
+
+    modify_license(&product_name, license_name, |payload| {
+        payload.exp = Some(new_exp);
+        Ok(())
+    })?;
+
+    println!("\n License renewed until {}.", date_str);
+    Ok(())
 }
 
 fn show(_product: &str) -> anyhow::Result<()> {
