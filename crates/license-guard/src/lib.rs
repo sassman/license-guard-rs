@@ -129,7 +129,7 @@ mod tests {
         let license_json = serde_json::to_string(&license_file).unwrap();
 
         let result = verifier.verify_active(&license_json);
-        assert!(matches!(result, Err(LicenseError::Expired)));
+        assert!(matches!(result, Err(LicenseError::Expired(_))));
     }
 
     #[test]

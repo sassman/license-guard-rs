@@ -72,8 +72,10 @@ impl LicenseVerifier {
     /// Verify, decode, and check expiry.
     pub fn verify_active(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         let payload = self.verify(license_data)?;
-        if payload.is_expired() {
-            return Err(LicenseError::Expired);
+        if let Some(exp) = payload.exp {
+            if payload.is_expired() {
+                return Err(LicenseError::Expired(exp));
+            }
         }
         Ok(payload)
     }

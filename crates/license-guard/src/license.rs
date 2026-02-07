@@ -55,16 +55,39 @@ impl LicenseFile {
 }
 
 impl LicensePayload {
+    fn now_secs() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
     /// Check if license is expired
     pub fn is_expired(&self) -> bool {
-        if let Some(exp) = self.exp {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            now > exp
+        self.exp.map(|exp| Self::now_secs() > exp).unwrap_or(false)
+    }
+
+    /// Time remaining until expiration.
+    /// Returns `None` if perpetual or already expired.
+    pub fn expires_in(&self) -> Option<std::time::Duration> {
+        let exp = self.exp?;
+        let now = Self::now_secs();
+        if now >= exp {
+            None
         } else {
-            false
+            Some(std::time::Duration::from_secs(exp - now))
+        }
+    }
+
+    /// Time since expiration.
+    /// Returns `None` if perpetual or not yet expired.
+    pub fn expired_since(&self) -> Option<std::time::Duration> {
+        let exp = self.exp?;
+        let now = Self::now_secs();
+        if now <= exp {
+            None
+        } else {
+            Some(std::time::Duration::from_secs(now - exp))
         }
     }
 

@@ -12,8 +12,8 @@ pub enum LicenseError {
     InvalidSignature,
 
     /// License `exp` timestamp is in the past
-    #[error("license expired")]
-    Expired,
+    #[error("license expired at {0}")]
+    Expired(u64),
 
     /// Required entitlement not in `ent` list
     #[error("missing entitlement: {0}")]
