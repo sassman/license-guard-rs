@@ -43,10 +43,9 @@ pub use verify::LicenseVerifier;
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
-    use rand::rngs::OsRng;
 
     fn create_test_keypair() -> (SigningKey, String) {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = SigningKey::generate(&mut rand::rng());
         let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
         (signing_key, public_key_hex)
     }

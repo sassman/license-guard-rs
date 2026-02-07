@@ -1,5 +1,4 @@
 use ed25519_dalek::SigningKey;
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -113,7 +112,7 @@ impl Product {
     /// Generate and save a new keypair for a product
     /// Returns (private_key_hex, public_key_hex)
     pub fn generate_keys(product_name: &str) -> anyhow::Result<(String, String)> {
-        let signing_key = SigningKey::generate(&mut OsRng);
+        let signing_key = SigningKey::generate(&mut rand::rng());
         let verifying_key = signing_key.verifying_key();
 
         let priv_hex = hex::encode(signing_key.to_bytes());
