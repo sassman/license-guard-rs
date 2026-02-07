@@ -1,5 +1,8 @@
 # license-forge
 
+[![Crates.io](https://img.shields.io/crates/v/license-forge.svg)](https://crates.io/crates/license-forge)
+[![License](https://img.shields.io/crates/l/license-forge.svg)](../../LICENSE-MIT)
+
 CLI tool for generating Ed25519-signed software licenses.
 
 ## Quick Start

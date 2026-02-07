@@ -5,6 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+authors.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/license-guard"
+keywords = ["license", "ed25519", "validation", "signing", "offline"]
+categories = ["authentication", "cryptography"]
 
 [dependencies]
 ed25519-dalek.workspace = true

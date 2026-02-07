@@ -1,5 +1,8 @@
 # license-guard-rs
 
+[![License](https://img.shields.io/crates/l/license-guard.svg)](LICENSE-MIT)
+[![Build](https://github.com/sassman/license-guard-rs/actions/workflows/build.yml/badge.svg)](https://github.com/sassman/license-guard-rs/actions/workflows/build.yml)
+
 Offline software license validation using Ed25519 signatures.
 
 ## Crates
@@ -15,12 +18,12 @@ Offline software license validation using Ed25519 signatures.
 Developer                              User
 ────────                              ────
 
-license-forge keygen
+license-forge product add
     │
     ├─► private key (keep secret!)
     └─► public key ──────────────────► embedded in app
                                              │
-license-forge generate ◄── customer info     │
+license-forge license add ◄── customer info  │
     │                                        │
     └─► license.lic ─────────────────► license-guard validates
                                        with public key

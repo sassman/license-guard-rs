@@ -1,5 +1,9 @@
 # license-guard
 
+[![Crates.io](https://img.shields.io/crates/v/license-guard.svg)](https://crates.io/crates/license-guard)
+[![Documentation](https://docs.rs/license-guard/badge.svg)](https://docs.rs/license-guard)
+[![License](https://img.shields.io/crates/l/license-guard.svg)](../../LICENSE-MIT)
+
 Offline license validation using Ed25519 signatures.
 
 ## Quick Start

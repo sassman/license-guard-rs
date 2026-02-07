@@ -10,6 +10,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/sassman/license-guard-rs"
+authors = ["Sven Kanoldt <sven@d34dl0ck.me>"]
 
 [workspace.dependencies]
 license-guard = { path = "crates/license-guard" }
