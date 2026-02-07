@@ -628,12 +628,89 @@ fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn show(_product: &str) -> anyhow::Result<()> {
-    todo!("show")
+fn show(product_name: &str) -> anyhow::Result<()> {
+    if !Product::exists(product_name) {
+        if product_name == "default" {
+            println!("No products configured.");
+            println!("\nCreate one with: license-forge product add");
+        } else {
+            println!("Product '{}' not found.", product_name);
+        }
+        return Ok(());
+    }
+
+    let product = Product::load(product_name)?;
+    let dir = Product::dir(product_name);
+
+    println!("Product: {}\n", product_name);
+    println!("  Name:         {}", product.name);
+    println!("  Directory:    {}", Product::display_path(&dir));
+    println!("  Entitlements: {:?}", product.entitlements);
+
+    // Keys
+    if Product::has_keys(product_name) {
+        let pk_hex = Product::get_public_key_hex(product_name)?;
+        println!("\n  Keys:");
+        println!(
+            "    Private: {}",
+            Product::display_path(&Product::private_key_path(product_name))
+        );
+        println!(
+            "    Public:  {}",
+            Product::display_path(&Product::public_key_path(product_name))
+        );
+        println!("\n  Public key (for embedding):");
+        println!("    {}", pk_hex);
+    } else {
+        println!("\n  Keys: not generated");
+    }
+
+    // Licenses summary
+    let license_count = count_licenses(product_name);
+    println!("\n  Licenses: {}", license_count);
+    if license_count > 0 {
+        println!(
+            "    Directory: {}",
+            Product::display_path(&Product::licenses_dir(product_name))
+        );
+        println!("\n    Run 'license-forge license list' for details.");
+    }
+
+    Ok(())
 }
 
-fn verify(_product: &str, _license: &str) -> anyhow::Result<()> {
-    todo!("verify")
+fn verify(product_name: &str, license_name: &str) -> anyhow::Result<()> {
+    use license_guard::LicenseVerifier;
+
+    let license_path = resolve_license_path(product_name, license_name)?;
+    let pk_hex = Product::get_public_key_hex(product_name)?;
+
+    let verifier = LicenseVerifier::from_hex(&pk_hex)?;
+    let license_data = fs::read_to_string(&license_path)?;
+
+    match verifier.verify_active(&license_data) {
+        Ok(payload) => {
+            println!(" License VALID\n");
+            println!("  Licensee:     {}", payload.sub);
+            println!("  Product:      {}", payload.iss);
+            println!("  Issued:       {}", format_timestamp(payload.iat));
+            if let Some(exp) = payload.exp {
+                println!("  Expires:      {}", format_timestamp(exp));
+            } else {
+                println!("  Expires:      Never");
+            }
+            println!("  Entitlements: {:?}", payload.ent);
+            if !payload.meta.is_empty() {
+                println!("  Metadata:     {:?}", payload.meta);
+            }
+        }
+        Err(e) => {
+            println!(" License INVALID: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
 }
 
 fn format_timestamp(ts: u64) -> String {
