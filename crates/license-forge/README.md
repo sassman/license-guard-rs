@@ -18,12 +18,24 @@ Creates `license.sk` (private, keep secret) and `license.pk` (public, embed in a
 license-forge generate -k ./keys/license.sk
 ```
 
-Interactive prompts for:
-- Licensee email/identifier
+First run prompts for:
 - Product identifier
-- Expiration date (optional)
-- Entitlements (reveal, hide, f5, premium)
-- Custom metadata (optional)
+- Entitlements (define your own list)
+- Option to save as profile
+
+Subsequent runs offer to load saved profiles.
+
+### Load Specific Profile
+
+```bash
+license-forge generate -k ./keys/license.sk -p myproduct
+```
+
+### List Profiles
+
+```bash
+license-forge profiles
+```
 
 ### Verify License
 
@@ -37,16 +49,24 @@ license-forge verify -k ./keys/license.pk -l user.lic
 license-forge show-public-key -k ./keys/license.sk
 ```
 
-Outputs the public key in hex format for embedding:
-```rust
-const PUBLIC_KEY: &str = "abc123...";
+## Profiles
+
+Profiles store product name and available entitlements for reuse.
+
+Location: `~/.config/license-forge/profiles/` (macOS/Linux)
+
+Example profile (`myproduct.toml`):
+```toml
+product = "myproduct"
+entitlements = ["basic", "pro", "enterprise"]
 ```
 
 ## Workflow
 
-1. **Once**: Generate keypair with `keygen`
-2. **Per customer**: Generate license with `generate`
-3. **In app**: Embed public key, validate with `license-guard`
+1. **Once**: `keygen` to create keypair
+2. **First license**: `generate` creates profile interactively
+3. **Next licenses**: `generate -p myproduct` loads saved profile
+4. **In app**: Embed public key, validate with `license-guard`
 
 ## License
 
