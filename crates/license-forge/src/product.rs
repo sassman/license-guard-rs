@@ -14,6 +14,9 @@ pub struct Product {
 }
 
 impl Product {
+    const PRIVATE_KEY_FILE: &'static str = "license.private";
+    const PUBLIC_KEY_FILE: &'static str = "license.pub";
+
     /// Base directory for all products: ~/.config/license-forge/
     pub fn base_dir() -> PathBuf {
         dirs::config_dir()
@@ -33,12 +36,12 @@ impl Product {
 
     /// Path to private key
     pub fn private_key_path(product_name: &str) -> PathBuf {
-        Self::dir(product_name).join("license.sk")
+        Self::dir(product_name).join(Self::PRIVATE_KEY_FILE)
     }
 
     /// Path to public key
     pub fn public_key_path(product_name: &str) -> PathBuf {
-        Self::dir(product_name).join("license.pk")
+        Self::dir(product_name).join(Self::PUBLIC_KEY_FILE)
     }
 
     /// Directory for licenses
@@ -113,39 +116,39 @@ impl Product {
         let signing_key = SigningKey::generate(&mut OsRng);
         let verifying_key = signing_key.verifying_key();
 
-        let sk_hex = hex::encode(signing_key.to_bytes());
-        let pk_hex = hex::encode(verifying_key.to_bytes());
+        let priv_hex = hex::encode(signing_key.to_bytes());
+        let pub_hex = hex::encode(verifying_key.to_bytes());
 
-        let sk_path = Self::private_key_path(product_name);
-        let pk_path = Self::public_key_path(product_name);
+        let priv_path = Self::private_key_path(product_name);
+        let pub_path = Self::public_key_path(product_name);
 
         // Ensure directory exists
-        if let Some(parent) = sk_path.parent() {
+        if let Some(parent) = priv_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        fs::write(&sk_path, &sk_hex)?;
-        fs::write(&pk_path, &pk_hex)?;
+        fs::write(&priv_path, &priv_hex)?;
+        fs::write(&pub_path, &pub_hex)?;
 
-        Ok((sk_hex, pk_hex))
+        Ok((priv_hex, pub_hex))
     }
 
     /// Backup existing keys if they exist (returns true if backup was made)
     pub fn backup_keys(product_name: &str) -> anyhow::Result<bool> {
-        let sk_path = Self::private_key_path(product_name);
-        let pk_path = Self::public_key_path(product_name);
+        let priv_path = Self::private_key_path(product_name);
+        let pub_path = Self::public_key_path(product_name);
 
-        if !sk_path.exists() {
+        if !priv_path.exists() {
             return Ok(false);
         }
 
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let sk_backup = Self::dir(product_name).join(format!("license.sk.{}.bak", timestamp));
-        let pk_backup = Self::dir(product_name).join(format!("license.pk.{}.bak", timestamp));
+        let priv_backup = Self::dir(product_name).join(format!("{}.{}.bak", Self::PRIVATE_KEY_FILE, timestamp));
+        let pub_backup = Self::dir(product_name).join(format!("{}.{}.bak", Self::PUBLIC_KEY_FILE, timestamp));
 
-        fs::copy(&sk_path, &sk_backup)?;
-        if pk_path.exists() {
-            fs::copy(&pk_path, &pk_backup)?;
+        fs::copy(&priv_path, &priv_backup)?;
+        if pub_path.exists() {
+            fs::copy(&pub_path, &pub_backup)?;
         }
 
         Ok(true)
@@ -153,19 +156,19 @@ impl Product {
 
     /// Load the signing key for a product
     pub fn load_signing_key(product_name: &str) -> anyhow::Result<SigningKey> {
-        let sk_path = Self::private_key_path(product_name);
-        let sk_hex = fs::read_to_string(&sk_path)?;
-        let sk_bytes = hex::decode(sk_hex.trim())?;
-        let sk_bytes: [u8; 32] = sk_bytes
+        let priv_path = Self::private_key_path(product_name);
+        let priv_hex = fs::read_to_string(&priv_path)?;
+        let priv_bytes = hex::decode(priv_hex.trim())?;
+        let priv_bytes: [u8; 32] = priv_bytes
             .try_into()
             .map_err(|_| anyhow::anyhow!("invalid key length"))?;
-        Ok(SigningKey::from_bytes(&sk_bytes))
+        Ok(SigningKey::from_bytes(&priv_bytes))
     }
 
     /// Get public key hex for a product
     pub fn get_public_key_hex(product_name: &str) -> anyhow::Result<String> {
-        let pk_path = Self::public_key_path(product_name);
-        Ok(fs::read_to_string(&pk_path)?.trim().to_string())
+        let pub_path = Self::public_key_path(product_name);
+        Ok(fs::read_to_string(&pub_path)?.trim().to_string())
     }
 
     /// Check if keys exist for a product

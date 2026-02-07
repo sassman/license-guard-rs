@@ -167,7 +167,7 @@ fn product_add(name: Option<String>) -> anyhow::Result<()> {
 
     // Generate keys
     println!("\nGenerating keys...");
-    let (_, pk_hex) = Product::generate_keys(&product_name)?;
+    let (_, pub_hex) = Product::generate_keys(&product_name)?;
 
     // Show summary
     let dir = Product::dir(&product_name);
@@ -186,7 +186,7 @@ fn product_add(name: Option<String>) -> anyhow::Result<()> {
         Product::display_path(&Product::public_key_path(&product_name))
     );
     println!("\n  Public key (for embedding in your app):");
-    println!("  {}\n", pk_hex);
+    println!("  {}\n", pub_hex);
 
     if product_name != "default" {
         println!("  Use with: license-forge -p {} license add", product_name);
@@ -323,12 +323,12 @@ fn ensure_product_exists(product_name: &str) -> anyhow::Result<String> {
     product.save("default")?;
 
     println!("\nGenerating keys...");
-    let (_, pk_hex) = Product::generate_keys("default")?;
+    let (_, pub_hex) = Product::generate_keys("default")?;
 
     let dir = Product::dir("default");
     println!("\n Default product created!\n");
     println!("  Directory:   {}", Product::display_path(&dir));
-    println!("  Public key:  {}\n", pk_hex);
+    println!("  Public key:  {}\n", pub_hex);
 
     Ok("default".to_string())
 }
@@ -662,7 +662,7 @@ fn show(product_name: &str) -> anyhow::Result<()> {
 
     // Keys
     if Product::has_keys(product_name) {
-        let pk_hex = Product::get_public_key_hex(product_name)?;
+        let pub_hex = Product::get_public_key_hex(product_name)?;
         println!("\n  Keys:");
         println!(
             "    Private: {}",
@@ -673,7 +673,7 @@ fn show(product_name: &str) -> anyhow::Result<()> {
             Product::display_path(&Product::public_key_path(product_name))
         );
         println!("\n  Public key (for embedding):");
-        println!("    {}", pk_hex);
+        println!("    {}", pub_hex);
     } else {
         println!("\n  Keys: not generated");
     }
@@ -696,9 +696,9 @@ fn verify(product_name: &str, license_name: &str) -> anyhow::Result<()> {
     use license_guard::LicenseVerifier;
 
     let license_path = resolve_license_path(product_name, license_name)?;
-    let pk_hex = Product::get_public_key_hex(product_name)?;
+    let pub_hex = Product::get_public_key_hex(product_name)?;
 
-    let verifier = LicenseVerifier::from_hex(&pk_hex)?;
+    let verifier = LicenseVerifier::from_hex(&pub_hex)?;
     let license_data = fs::read_to_string(&license_path)?;
 
     match verifier.verify_active(&license_data) {

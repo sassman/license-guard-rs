@@ -70,8 +70,8 @@ Products are stored in `~/.config/license-forge/`:
 ~/.config/license-forge/
 ├── default/
 │   ├── product.toml        # Product config
-│   ├── license.sk          # Private key (keep secret!)
-│   ├── license.pk          # Public key (embed in app)
+│   ├── license.private     # Private key (keep secret!)
+│   ├── license.pub         # Public key (embed in app)
 │   └── licenses/
 │       └── user_at_example.lic
 └── myproduct/
