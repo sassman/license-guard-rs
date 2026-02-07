@@ -1,3 +1,5 @@
+use ed25519_dalek::SigningKey;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -103,5 +105,71 @@ impl Product {
             }
         }
         path.display().to_string()
+    }
+
+    /// Generate and save a new keypair for a product
+    /// Returns (private_key_hex, public_key_hex)
+    pub fn generate_keys(product_name: &str) -> anyhow::Result<(String, String)> {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key = signing_key.verifying_key();
+
+        let sk_hex = hex::encode(signing_key.to_bytes());
+        let pk_hex = hex::encode(verifying_key.to_bytes());
+
+        let sk_path = Self::private_key_path(product_name);
+        let pk_path = Self::public_key_path(product_name);
+
+        // Ensure directory exists
+        if let Some(parent) = sk_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        fs::write(&sk_path, &sk_hex)?;
+        fs::write(&pk_path, &pk_hex)?;
+
+        Ok((sk_hex, pk_hex))
+    }
+
+    /// Backup existing keys if they exist (returns true if backup was made)
+    pub fn backup_keys(product_name: &str) -> anyhow::Result<bool> {
+        let sk_path = Self::private_key_path(product_name);
+        let pk_path = Self::public_key_path(product_name);
+
+        if !sk_path.exists() {
+            return Ok(false);
+        }
+
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let sk_backup = Self::dir(product_name).join(format!("license.sk.{}.bak", timestamp));
+        let pk_backup = Self::dir(product_name).join(format!("license.pk.{}.bak", timestamp));
+
+        fs::copy(&sk_path, &sk_backup)?;
+        if pk_path.exists() {
+            fs::copy(&pk_path, &pk_backup)?;
+        }
+
+        Ok(true)
+    }
+
+    /// Load the signing key for a product
+    pub fn load_signing_key(product_name: &str) -> anyhow::Result<SigningKey> {
+        let sk_path = Self::private_key_path(product_name);
+        let sk_hex = fs::read_to_string(&sk_path)?;
+        let sk_bytes = hex::decode(sk_hex.trim())?;
+        let sk_bytes: [u8; 32] = sk_bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid key length"))?;
+        Ok(SigningKey::from_bytes(&sk_bytes))
+    }
+
+    /// Get public key hex for a product
+    pub fn get_public_key_hex(product_name: &str) -> anyhow::Result<String> {
+        let pk_path = Self::public_key_path(product_name);
+        Ok(fs::read_to_string(&pk_path)?.trim().to_string())
+    }
+
+    /// Check if keys exist for a product
+    pub fn has_keys(product_name: &str) -> bool {
+        Self::private_key_path(product_name).exists()
     }
 }
