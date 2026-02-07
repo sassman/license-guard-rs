@@ -73,4 +73,20 @@ impl LicenseVerifier {
         }
         Ok(payload)
     }
+
+    /// Verify license in either JSON or compact format (payload.signature)
+    pub fn verify_auto(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
+        let trimmed = license_data.trim();
+
+        // Try compact format first (no braces)
+        if !trimmed.starts_with('{') {
+            let license_file = LicenseFile::from_compact(trimmed)
+                .map_err(|e| LicenseError::InvalidFormat(e.to_string()))?;
+            let json = serde_json::to_string(&license_file)?;
+            return self.verify(&json);
+        }
+
+        // Otherwise parse as JSON
+        self.verify(trimmed)
+    }
 }

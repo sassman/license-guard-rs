@@ -32,6 +32,25 @@ pub struct LicenseFile {
     pub sig: String,
 }
 
+impl LicenseFile {
+    /// Convert to compact single-line format: payload.signature
+    pub fn to_compact(&self) -> String {
+        format!("{}.{}", self.payload, self.sig)
+    }
+
+    /// Parse from compact format (payload.signature)
+    pub fn from_compact(s: &str) -> Result<Self, &'static str> {
+        let parts: Vec<&str> = s.trim().split('.').collect();
+        if parts.len() != 2 {
+            return Err("invalid compact format: expected payload.signature");
+        }
+        Ok(Self {
+            payload: parts[0].to_string(),
+            sig: parts[1].to_string(),
+        })
+    }
+}
+
 impl LicensePayload {
     /// Check if license is expired
     pub fn is_expired(&self) -> bool {
