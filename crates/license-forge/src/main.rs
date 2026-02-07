@@ -252,6 +252,22 @@ fn count_licenses(product_name: &str) -> usize {
         .unwrap_or(0)
 }
 
+/// Print helpful message when default product doesn't exist
+fn print_no_default_product_hint() {
+    let products = Product::list();
+    if products.is_empty() {
+        println!("No products configured.");
+        println!("\nCreate one with: license-forge product add");
+    } else {
+        println!("Specify a product with -p <name>:\n");
+        for name in &products {
+            println!("  license-forge -p {} <command>", name);
+        }
+        println!("\nOr create a default product:\n");
+        println!("  license-forge product add default");
+    }
+}
+
 fn product_remove(name: &str) -> anyhow::Result<()> {
     if !Product::exists(name) {
         anyhow::bail!("Product '{}' not found", name);
@@ -485,7 +501,7 @@ fn license_add(product_name: &str) -> anyhow::Result<()> {
 fn license_list(product_name: &str) -> anyhow::Result<()> {
     if !Product::exists(product_name) {
         if product_name == "default" {
-            println!("No products configured. Create one with: license-forge product add");
+            print_no_default_product_hint();
         } else {
             println!("Product '{}' not found.", product_name);
         }
@@ -671,8 +687,7 @@ fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
 fn show(product_name: &str) -> anyhow::Result<()> {
     if !Product::exists(product_name) {
         if product_name == "default" {
-            println!("No products configured.");
-            println!("\nCreate one with: license-forge product add");
+            print_no_default_product_hint();
         } else {
             println!("Product '{}' not found.", product_name);
         }
