@@ -267,6 +267,59 @@ fn product_remove(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Ensures the product exists. If product is "default" and doesn't exist, creates it interactively.
+/// Returns the product name to use.
+fn ensure_product_exists(product_name: &str) -> anyhow::Result<String> {
+    if Product::exists(product_name) {
+        return Ok(product_name.to_string());
+    }
+
+    if product_name != "default" {
+        anyhow::bail!(
+            "Product '{}' not found. Create it with: license-forge product add {}",
+            product_name,
+            product_name
+        );
+    }
+
+    // Lazy create default product
+    println!("No products configured. Let's set up the default product.\n");
+
+    let display_name: String = Input::new()
+        .with_prompt("Product identifier (appears in licenses)")
+        .default("default".to_string())
+        .interact_text()?;
+
+    println!("\nEnter entitlements (empty line to finish):");
+    let mut entitlements = Vec::new();
+    loop {
+        let ent: String = Input::new()
+            .with_prompt(format!("  Entitlement {}", entitlements.len() + 1))
+            .allow_empty(true)
+            .interact_text()?;
+        if ent.is_empty() {
+            break;
+        }
+        entitlements.push(ent);
+    }
+
+    let product = Product {
+        name: display_name,
+        entitlements,
+    };
+    product.save("default")?;
+
+    println!("\nGenerating keys...");
+    let (_, pk_hex) = Product::generate_keys("default")?;
+
+    let dir = Product::dir("default");
+    println!("\n Default product created!\n");
+    println!("  Directory:   {}", Product::display_path(&dir));
+    println!("  Public key:  {}\n", pk_hex);
+
+    Ok("default".to_string())
+}
+
 fn license_add(_product: &str) -> anyhow::Result<()> {
     todo!("license_add")
 }
