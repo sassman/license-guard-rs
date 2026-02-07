@@ -436,8 +436,82 @@ fn license_add(product_name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn license_list(_product: &str) -> anyhow::Result<()> {
-    todo!("license_list")
+fn license_list(product_name: &str) -> anyhow::Result<()> {
+    if !Product::exists(product_name) {
+        if product_name == "default" {
+            println!("No products configured. Create one with: license-forge product add");
+        } else {
+            println!("Product '{}' not found.", product_name);
+        }
+        return Ok(());
+    }
+
+    let licenses_dir = Product::licenses_dir(product_name);
+    if !licenses_dir.exists() {
+        println!("No licenses found for product '{}'.", product_name);
+        return Ok(());
+    }
+
+    let mut licenses: Vec<_> = fs::read_dir(&licenses_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|ext| ext == "lic")
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if licenses.is_empty() {
+        println!("No licenses found for product '{}'.", product_name);
+        return Ok(());
+    }
+
+    // Sort by modification time (newest first)
+    licenses.sort_by(|a, b| {
+        let a_time = a.metadata().and_then(|m| m.modified()).ok();
+        let b_time = b.metadata().and_then(|m| m.modified()).ok();
+        b_time.cmp(&a_time)
+    });
+
+    println!("Licenses for '{}':\n", product_name);
+
+    for entry in licenses {
+        let path = entry.path();
+        let filename = path.file_name().unwrap().to_string_lossy();
+
+        // Try to read and parse the license
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(license_file) = serde_json::from_str::<LicenseFile>(&content) {
+                if let Ok(payload_bytes) = BASE64_STANDARD.decode(&license_file.payload) {
+                    if let Ok(payload) = serde_json::from_slice::<LicensePayload>(&payload_bytes) {
+                        let status = match payload.exp {
+                            Some(exp) if exp < Utc::now().timestamp() as u64 => " [EXPIRED]",
+                            Some(_) => "",
+                            None => " [perpetual]",
+                        };
+                        let exp_str = payload
+                            .exp
+                            .map(|e| format_timestamp(e))
+                            .unwrap_or_else(|| "never".to_string());
+
+                        println!("  {}{}", filename, status);
+                        println!("    Licensee: {}", payload.sub);
+                        println!("    Issued:   {}", format_timestamp(payload.iat));
+                        println!("    Expires:  {}", exp_str);
+                        println!("    Entitlements: {:?}", payload.ent);
+                        println!();
+                        continue;
+                    }
+                }
+            }
+        }
+        // Fallback if can't parse
+        println!("  {} (unable to parse)", filename);
+        println!();
+    }
+
+    Ok(())
 }
 
 fn license_expire(_product: &str, _license: &str) -> anyhow::Result<()> {
