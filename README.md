@@ -4,33 +4,34 @@ Offline software license validation using Ed25519 signatures.
 
 ## Crates
 
-- **license-guard** - Library for validating licenses in your application
-- **license-forge** - CLI tool for generating licenses (developer-side)
+| Crate | Description |
+|-------|-------------|
+| [license-guard](crates/license-guard/) | Library for validating licenses in your app |
+| [license-forge](crates/license-forge/) | CLI tool for generating licenses |
 
-## Quick Start
+## How It Works
 
-```rust
-use license_guard::global;
+```
+Developer                              User
+────────                              ────
 
-// Initialize once at startup
-global::init("your_public_key_hex")?;
-
-// Activate when user enters license
-global::activate(license_data)?;
-
-// Check entitlements from anywhere
-if global::has("premium") {
-    // premium feature enabled
-}
+license-forge keygen
+    │
+    ├─► private key (keep secret!)
+    └─► public key ──────────────────► embedded in app
+                                             │
+license-forge generate ◄── customer info     │
+    │                                        │
+    └─► license.lic ─────────────────► license-guard validates
+                                       with public key
 ```
 
 ## Security
 
-Uses Ed25519 asymmetric signatures:
-- Private key stays on your server (generates licenses)
-- Public key embedded in app (verifies licenses)
-- Keygens are cryptographically impossible without private key
+- **Ed25519 signatures** - 128-bit security, FIPS 186-5 approved
+- **Asymmetric** - public key can't forge licenses
+- **Offline** - no server contact needed for validation
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
+MIT OR Apache-2.0
