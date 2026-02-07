@@ -152,4 +152,62 @@ mod tests {
         let result = verifier.verify_with_entitlement(&license_json, "feature2");
         assert!(matches!(result, Err(LicenseError::MissingEntitlement(_))));
     }
+
+    #[test]
+    fn test_from_path_json() {
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "path@test.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec![],
+            meta: Default::default(),
+        };
+
+        let license_file = sign_payload(&signing_key, &payload);
+        let json = serde_json::to_string(&license_file).unwrap();
+
+        let tmp = std::env::temp_dir().join("license-guard-test.json");
+        std::fs::write(&tmp, &json).unwrap();
+
+        let loaded = LicenseFile::from_path(&tmp).unwrap();
+        let license_json = serde_json::to_string(&loaded).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "path@test.com");
+
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_from_path_compact() {
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "compact@test.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec![],
+            meta: Default::default(),
+        };
+
+        let license_file = sign_payload(&signing_key, &payload);
+        let compact = license_file.to_compact();
+
+        let tmp = std::env::temp_dir().join("license-guard-test.lic");
+        std::fs::write(&tmp, &compact).unwrap();
+
+        let loaded = LicenseFile::from_path(&tmp).unwrap();
+        let license_json = serde_json::to_string(&loaded).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "compact@test.com");
+
+        std::fs::remove_file(&tmp).ok();
+    }
 }

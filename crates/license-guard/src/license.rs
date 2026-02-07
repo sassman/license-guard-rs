@@ -41,6 +41,31 @@ impl LicenseFile {
         format!("{}.{}", self.payload, self.sig)
     }
 
+    /// Read and parse a license from a file path.
+    ///
+    /// Supports both JSON and compact (`payload.signature`) formats.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use license_guard::LicenseFile;
+    ///
+    /// let license = LicenseFile::from_path("license.json")?;
+    /// // or compact format:
+    /// let license = LicenseFile::from_path("license.lic")?;
+    /// ```
+    pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, crate::LicenseError> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| crate::LicenseError::InvalidFormat(e.to_string()))?;
+        let trimmed = content.trim();
+        if trimmed.starts_with('{') {
+            Ok(serde_json::from_str(trimmed)?)
+        } else {
+            Self::from_compact(trimmed)
+                .map_err(|e| crate::LicenseError::InvalidFormat(e.to_string()))
+        }
+    }
+
     /// Parse from compact format: `payload.signature`
     pub fn from_compact(s: &str) -> Result<Self, &'static str> {
         let parts: Vec<&str> = s.trim().split('.').collect();
