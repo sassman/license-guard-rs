@@ -4,13 +4,33 @@
 //! testable code without global state, or custom verification logic.
 //!
 //! For most apps, prefer the [`global`](crate::global) module.
+//!
+//! # Choosing a Verification Method
+//!
+//! Methods are layered — each adds a check on top of the previous:
+//!
+//! | Method | Signature | Expiry | Entitlement |
+//! |--------|-----------|--------|-------------|
+//! | [`verify`](LicenseVerifier::verify) | yes | — | — |
+//! | [`verify_active`](LicenseVerifier::verify_active) | yes | yes | — |
+//! | [`verify_with_entitlement`](LicenseVerifier::verify_with_entitlement) | yes | yes | yes |
+//!
+//! [`verify_auto`](LicenseVerifier::verify_auto) is a format-detecting
+//! wrapper around [`verify`](LicenseVerifier::verify) — use it when the
+//! input may be JSON or compact format (e.g. loaded from a file).
+//!
+//! Expiry checks compare against the system clock (UTC). Ensure the
+//! host machine's clock is reasonably accurate.
 
 use crate::error::LicenseError;
 use crate::license::{LicenseFile, LicensePayload};
 use base64::prelude::*;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-/// Verifies licenses against a public key.
+/// Verifies Ed25519-signed licenses against a public key.
+///
+/// Create one instance per product at startup and reuse it. The verifier
+/// is immutable and can be shared across threads (`Send + Sync`).
 ///
 /// # Example
 ///
@@ -18,7 +38,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 /// use license_guard::LicenseVerifier;
 ///
 /// let verifier = LicenseVerifier::from_hex("abc123...")?;
-/// let payload = verifier.verify(license_data)?;
+/// let payload = verifier.verify_active(license_data)?;
 /// println!("Licensed to: {}", payload.sub);
 /// ```
 pub struct LicenseVerifier {
@@ -43,7 +63,15 @@ impl LicenseVerifier {
         Ok(Self { public_key })
     }
 
-    /// Verify signature and decode payload.
+    /// Verify the Ed25519 signature and decode the payload.
+    ///
+    /// This is the lowest-level verify method — it checks only the
+    /// cryptographic signature. It does **not** check expiry or
+    /// entitlements. Use [`verify_active`](Self::verify_active) or
+    /// [`verify_with_entitlement`](Self::verify_with_entitlement) for that.
+    ///
+    /// Expects `license_data` in JSON format. For auto-detection of
+    /// JSON vs compact format, use [`verify_auto`](Self::verify_auto).
     pub fn verify(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         // Parse the license file JSON
         let license_file: LicenseFile = serde_json::from_str(license_data)?;
@@ -69,7 +97,11 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify, decode, and check expiry.
+    /// Verify signature, decode payload, and reject expired licenses.
+    ///
+    /// This is the recommended method for most use cases. Returns
+    /// [`LicenseError::Expired`] if `exp` is in the past. Perpetual
+    /// licenses (`exp: None`) always pass the expiry check.
     pub fn verify_active(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         let payload = self.verify(license_data)?;
         if let Some(exp) = payload.exp {
@@ -80,7 +112,11 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify, check expiry, and require entitlement.
+    /// Verify signature, check expiry, and require a specific entitlement.
+    ///
+    /// Returns [`LicenseError::MissingEntitlement`] if the entitlement
+    /// is not in the payload's `ent` list. Matching is exact and
+    /// case-sensitive.
     pub fn verify_with_entitlement(
         &self,
         license_data: &str,
@@ -93,7 +129,16 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify license in JSON or compact format (payload.signature).
+    /// Verify a license in either JSON or compact format.
+    ///
+    /// Auto-detects the format: strings starting with `{` are parsed as
+    /// JSON, everything else as compact (`payload.signature`). Use this
+    /// when loading licenses from files or user input where the format
+    /// is not known in advance.
+    ///
+    /// Only checks the signature — combine with
+    /// [`LicensePayload::is_expired`] or
+    /// [`LicensePayload::has_entitlement`] for additional checks.
     pub fn verify_auto(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         let trimmed = license_data.trim();
 

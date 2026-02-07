@@ -1,37 +1,61 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// License payload - the signed data.
+/// The signed license payload containing licensee info, entitlements, and expiry.
 ///
-/// Decode with [`LicenseVerifier::verify`](crate::LicenseVerifier::verify)
-/// or [`global::activate`](crate::global::activate).
+/// This is the data that gets signed by Ed25519. After verification with
+/// [`LicenseVerifier::verify`](crate::LicenseVerifier::verify) or
+/// [`global::activate`](crate::global::activate), you get a `LicensePayload`
+/// to inspect.
+///
+/// Field names follow JWT-style conventions (`sub`, `iss`, `iat`, `exp`, `ent`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicensePayload {
-    /// Schema version (currently 1)
+    /// Schema version. Currently `1`. Future versions may add fields;
+    /// unknown fields are silently ignored by serde, so forward
+    /// compatibility is preserved.
     pub v: u32,
-    /// Licensee identifier (email, user ID, etc.)
+    /// Licensee identifier — typically an email address or user ID.
+    /// Use this to display "Licensed to …" in your UI.
     pub sub: String,
-    /// Product identifier
+    /// Product identifier — the product this license was issued for
+    /// (e.g. `"my-app"`). Matches the product name in `license-forge`.
     pub iss: String,
-    /// Issue timestamp (Unix seconds)
+    /// Issue timestamp as Unix seconds (UTC).
     pub iat: u64,
-    /// Expiry timestamp (Unix seconds), None = never expires
+    /// Expiry timestamp as Unix seconds (UTC). `None` means the license
+    /// never expires (perpetual). Check with [`is_expired`](Self::is_expired)
+    /// or let [`LicenseVerifier::verify_active`](crate::LicenseVerifier::verify_active)
+    /// do it for you.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exp: Option<u64>,
-    /// Enabled features
+    /// Entitlements — feature flags the licensee has access to
+    /// (e.g. `["premium", "f5"]`). Check with
+    /// [`has_entitlement`](Self::has_entitlement) or [`global::has`](crate::global::has).
     #[serde(default)]
     pub ent: Vec<String>,
-    /// Custom key-value data
+    /// Arbitrary key-value metadata. Use for anything that doesn't fit the
+    /// standard fields — e.g. `seats`, `org`, `tier`. Omitted from
+    /// serialization when empty.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub meta: HashMap<String, String>,
 }
 
-/// License file format with payload and signature.
+/// A signed license file containing a base64-encoded payload and its Ed25519 signature.
+///
+/// Two serialization formats are supported:
+///
+/// - **JSON** — `{"payload":"<base64>","sig":"<base64>"}`
+/// - **Compact** — `<base64-payload>.<base64-sig>` (one line, dot-separated)
+///
+/// Use [`from_path`](Self::from_path) to load from disk,
+/// [`from_base64`](Self::from_base64) to decode a pasted license key, or
+/// [`from_compact`](Self::from_compact) to parse the dot-separated format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicenseFile {
-    /// Base64-encoded JSON payload
+    /// Base64-encoded JSON payload (the serialized [`LicensePayload`])
     pub payload: String,
-    /// Base64-encoded Ed25519 signature
+    /// Base64-encoded Ed25519 signature over the raw JSON payload bytes
     pub sig: String,
 }
 
@@ -124,13 +148,17 @@ impl LicensePayload {
             .unwrap_or(0)
     }
 
-    /// Check if license is expired
+    /// Check if the license has expired.
+    ///
+    /// Returns `false` for perpetual licenses (`exp: None`).
+    /// Compares against the current system time (UTC).
     pub fn is_expired(&self) -> bool {
         self.exp.map(|exp| Self::now_secs() > exp).unwrap_or(false)
     }
 
     /// Time remaining until expiration.
-    /// Returns `None` if perpetual or already expired.
+    ///
+    /// Returns `None` if the license is perpetual (`exp: None`) or already expired.
     pub fn expires_in(&self) -> Option<std::time::Duration> {
         let exp = self.exp?;
         let now = Self::now_secs();
@@ -141,8 +169,9 @@ impl LicensePayload {
         }
     }
 
-    /// Time since expiration.
-    /// Returns `None` if perpetual or not yet expired.
+    /// Time elapsed since expiration.
+    ///
+    /// Returns `None` if the license is perpetual (`exp: None`) or still valid.
     pub fn expired_since(&self) -> Option<std::time::Duration> {
         let exp = self.exp?;
         let now = Self::now_secs();
@@ -153,7 +182,11 @@ impl LicensePayload {
         }
     }
 
-    /// Check if license has a specific entitlement
+    /// Check if the license includes a specific entitlement.
+    ///
+    /// Entitlements are arbitrary strings defined by your application
+    /// (e.g. `"premium"`, `"export"`, `"f5"`). Matching is exact and
+    /// case-sensitive.
     pub fn has_entitlement(&self, entitlement: &str) -> bool {
         self.ent.iter().any(|e| e == entitlement)
     }
