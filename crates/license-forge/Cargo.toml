@@ -15,7 +15,7 @@ name = "license-forge"
 path = "src/main.rs"
 
 [dependencies]
-license-guard.workspace = true
+license-guard = { workspace = true, features = ["sign"] }
 ed25519-dalek.workspace = true
 rand.workspace = true
 dialoguer.workspace = true

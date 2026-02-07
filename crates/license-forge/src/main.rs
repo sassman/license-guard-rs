@@ -4,7 +4,6 @@ use base64::prelude::*;
 use chrono::{Datelike, NaiveDate, Utc};
 use clap::{CommandFactory, Parser, Subcommand};
 use dialoguer::{Confirm, Input, MultiSelect, Select};
-use ed25519_dalek::Signer;
 use license_guard::{LicenseFile, LicensePayload};
 use product::Product;
 use std::collections::HashMap;
@@ -538,14 +537,7 @@ fn license_add(
     };
 
     // Sign payload
-    let payload_json = serde_json::to_string(&payload)?;
-    let signature = signing_key.sign(payload_json.as_bytes());
-
-    let license_file = LicenseFile {
-        payload: BASE64_STANDARD.encode(payload_json.as_bytes()),
-        sig: BASE64_STANDARD.encode(signature.to_bytes()),
-    };
-
+    let license_file = payload.sign(&signing_key)?;
     let license_json = serde_json::to_string_pretty(&license_file)?;
 
     // Save to licenses directory
@@ -702,13 +694,7 @@ where
     modifier(&mut payload)?;
 
     // Re-sign
-    let payload_json = serde_json::to_string(&payload)?;
-    let signature = signing_key.sign(payload_json.as_bytes());
-
-    let new_license = LicenseFile {
-        payload: BASE64_STANDARD.encode(payload_json.as_bytes()),
-        sig: BASE64_STANDARD.encode(signature.to_bytes()),
-    };
+    let new_license = payload.sign(&signing_key)?;
 
     // Save
     fs::write(&license_path, serde_json::to_string_pretty(&new_license)?)?;
