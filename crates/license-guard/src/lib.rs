@@ -1,32 +1,34 @@
-//! # license-guard
-//!
 //! Offline license validation using Ed25519 signatures.
 //!
-//! ## Quick Start (using global module)
+//! # Quick Start
 //!
 //! ```rust,ignore
 //! use license_guard::global;
 //!
-//! // Initialize once at startup
-//! global::init("your_public_key_hex").unwrap();
+//! // 1. Initialize once at startup
+//! global::init("your_public_key_hex")?;
 //!
-//! // Activate when user enters license
-//! global::activate(license_data).unwrap();
+//! // 2. Activate when user enters license
+//! global::activate(license_data)?;
 //!
-//! // Check entitlements from anywhere - no context passing needed
+//! // 3. Check entitlements anywhere in your code
 //! if global::has("premium") {
 //!     // premium feature
 //! }
 //! ```
 //!
-//! ## Direct API (for more control)
+//! # Choosing an API
 //!
-//! ```rust,ignore
-//! use license_guard::LicenseVerifier;
+//! | Use case | API |
+//! |----------|-----|
+//! | Most apps | [`global`] module - no context passing |
+//! | Multiple products | [`LicenseVerifier`] - one per product |
+//! | Testing | [`LicenseVerifier`] - no global state |
 //!
-//! let verifier = LicenseVerifier::from_hex(PUBLIC_KEY).unwrap();
-//! let payload = verifier.verify_with_entitlement(license, "hide").unwrap();
-//! ```
+//! # Generating Licenses
+//!
+//! Use the `license-forge` CLI tool to generate keypairs and sign licenses.
+//! See the repository README for details.
 
 mod error;
 mod license;

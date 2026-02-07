@@ -1,24 +1,17 @@
-//! Global license state for easy access from anywhere in the application.
+//! Global license state for apps that validate a single product.
 //!
-//! This module provides a singleton pattern so you don't need to pass
-//! the license verifier through your entire call chain.
-//!
-//! # Usage
+//! # Example
 //!
 //! ```rust,ignore
 //! use license_guard::global;
 //!
-//! // 1. Initialize once at app startup
-//! global::init("your_public_key_hex")?;
+//! global::init("abc123...")?;
+//! global::activate(user_license)?;
 //!
-//! // 2. Activate when user enters license
-//! global::activate(license_data)?;
-//!
-//! // 3. Check entitlements from anywhere
-//! if global::has("feature_name") {
-//!     // feature is enabled
-//! }
+//! if global::has("feature") { /* ... */ }
 //! ```
+//!
+//! For multiple products or testing, use [`LicenseVerifier`] directly.
 
 use std::sync::{OnceLock, RwLock};
 use crate::{LicenseError, LicensePayload, LicenseVerifier};
@@ -26,13 +19,7 @@ use crate::{LicenseError, LicensePayload, LicenseVerifier};
 static VERIFIER: OnceLock<LicenseVerifier> = OnceLock::new();
 static LICENSE: RwLock<Option<LicensePayload>> = RwLock::new(None);
 
-/// Initialize the license system with your public key.
-///
-/// Call this once at application startup before any other license operations.
-///
-/// # Errors
-///
-/// Returns error if the public key is invalid or if already initialized.
+/// Initialize with your public key. Call once at startup.
 pub fn init(public_key_hex: &str) -> Result<(), LicenseError> {
     let verifier = LicenseVerifier::from_hex(public_key_hex)?;
     VERIFIER.set(verifier).map_err(|_|
@@ -45,11 +32,7 @@ pub fn is_initialized() -> bool {
     VERIFIER.get().is_some()
 }
 
-/// Activate a license. Can be called multiple times (e.g., when user enters new license).
-///
-/// # Errors
-///
-/// Returns error if license system not initialized, or if license is invalid/expired.
+/// Activate a license. Can be called multiple times.
 pub fn activate(license_data: &str) -> Result<LicensePayload, LicenseError> {
     let verifier = VERIFIER.get()
         .ok_or_else(|| LicenseError::InvalidFormat("license system not initialized - call init() first".into()))?;
@@ -58,14 +41,12 @@ pub fn activate(license_data: &str) -> Result<LicensePayload, LicenseError> {
     Ok(payload)
 }
 
-/// Clear the current license (e.g., for logout or reset).
+/// Clear current license.
 pub fn deactivate() {
     *LICENSE.write().unwrap() = None;
 }
 
-/// Check if a specific entitlement is present in the current license.
-///
-/// Returns `false` if no license is active or if the entitlement is not present.
+/// Check if an entitlement is present.
 pub fn has(entitlement: &str) -> bool {
     LICENSE.read().unwrap()
         .as_ref()
@@ -73,19 +54,19 @@ pub fn has(entitlement: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if any valid license is currently active.
+/// Check if any license is active.
 pub fn is_licensed() -> bool {
     LICENSE.read().unwrap().is_some()
 }
 
-/// Get the licensee identifier (e.g., email) if a license is active.
+/// Get licensee identifier if licensed.
 pub fn licensee() -> Option<String> {
     LICENSE.read().unwrap()
         .as_ref()
         .map(|p| p.sub.clone())
 }
 
-/// Get the full license payload if a license is active.
+/// Get full license payload if licensed.
 pub fn payload() -> Option<LicensePayload> {
     LICENSE.read().unwrap().clone()
 }

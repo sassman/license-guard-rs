@@ -1,22 +1,39 @@
+//! Direct verification API for advanced use cases.
+//!
+//! Use this when you need multiple verifiers (different products),
+//! testable code without global state, or custom verification logic.
+//!
+//! For most apps, prefer the [`global`](crate::global) module.
+
 use crate::error::LicenseError;
 use crate::license::{LicenseFile, LicensePayload};
 use base64::prelude::*;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-/// License verifier with embedded public key
+/// Verifies licenses against a public key.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use license_guard::LicenseVerifier;
+///
+/// let verifier = LicenseVerifier::from_hex("abc123...")?;
+/// let payload = verifier.verify(license_data)?;
+/// println!("Licensed to: {}", payload.sub);
+/// ```
 pub struct LicenseVerifier {
     public_key: VerifyingKey,
 }
 
 impl LicenseVerifier {
-    /// Create verifier from hex-encoded public key
+    /// Create from hex-encoded public key.
     pub fn from_hex(hex_key: &str) -> Result<Self, LicenseError> {
         let bytes = hex::decode(hex_key)
             .map_err(|e| LicenseError::InvalidPublicKey(e.to_string()))?;
         Self::from_bytes(&bytes)
     }
 
-    /// Create verifier from raw public key bytes
+    /// Create from raw 32-byte public key.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, LicenseError> {
         let bytes: [u8; 32] = bytes
             .try_into()
@@ -26,7 +43,7 @@ impl LicenseVerifier {
         Ok(Self { public_key })
     }
 
-    /// Verify and decode a license file
+    /// Verify signature and decode payload.
     pub fn verify(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         // Parse the license file JSON
         let license_file: LicenseFile = serde_json::from_str(license_data)?;
@@ -52,7 +69,7 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify, decode, and check expiry
+    /// Verify, decode, and check expiry.
     pub fn verify_active(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         let payload = self.verify(license_data)?;
         if payload.is_expired() {
@@ -61,7 +78,7 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify, decode, check expiry, and require specific entitlement
+    /// Verify, check expiry, and require entitlement.
     pub fn verify_with_entitlement(
         &self,
         license_data: &str,
@@ -74,7 +91,7 @@ impl LicenseVerifier {
         Ok(payload)
     }
 
-    /// Verify license in either JSON or compact format (payload.signature)
+    /// Verify license in JSON or compact format (payload.signature).
     pub fn verify_auto(&self, license_data: &str) -> Result<LicensePayload, LicenseError> {
         let trimmed = license_data.trim();
 

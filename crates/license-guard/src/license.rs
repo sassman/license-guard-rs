@@ -1,29 +1,32 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// License payload - the data that gets signed
+/// License payload - the signed data.
+///
+/// Decode with [`LicenseVerifier::verify`](crate::LicenseVerifier::verify)
+/// or [`global::activate`](crate::global::activate).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicensePayload {
-    /// Schema version
+    /// Schema version (currently 1)
     pub v: u32,
-    /// Subject (licensee identifier, e.g., email)
+    /// Licensee identifier (email, user ID, etc.)
     pub sub: String,
-    /// Issuer (product identifier)
+    /// Product identifier
     pub iss: String,
-    /// Issued at (Unix timestamp)
+    /// Issue timestamp (Unix seconds)
     pub iat: u64,
-    /// Expires at (Unix timestamp, None = never expires)
+    /// Expiry timestamp (Unix seconds), None = never expires
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exp: Option<u64>,
-    /// Entitlements (features enabled)
+    /// Enabled features
     #[serde(default)]
     pub ent: Vec<String>,
-    /// Optional metadata
+    /// Custom key-value data
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub meta: HashMap<String, String>,
 }
 
-/// Complete license file with payload and signature
+/// License file format with payload and signature.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicenseFile {
     /// Base64-encoded JSON payload
@@ -33,12 +36,12 @@ pub struct LicenseFile {
 }
 
 impl LicenseFile {
-    /// Convert to compact single-line format: payload.signature
+    /// Convert to compact format: `payload.signature`
     pub fn to_compact(&self) -> String {
         format!("{}.{}", self.payload, self.sig)
     }
 
-    /// Parse from compact format (payload.signature)
+    /// Parse from compact format: `payload.signature`
     pub fn from_compact(s: &str) -> Result<Self, &'static str> {
         let parts: Vec<&str> = s.trim().split('.').collect();
         if parts.len() != 2 {
