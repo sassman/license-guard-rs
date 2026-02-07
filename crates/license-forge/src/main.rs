@@ -320,8 +320,120 @@ fn ensure_product_exists(product_name: &str) -> anyhow::Result<String> {
     Ok("default".to_string())
 }
 
-fn license_add(_product: &str) -> anyhow::Result<()> {
-    todo!("license_add")
+fn license_add(product_name: &str) -> anyhow::Result<()> {
+    let product_name = ensure_product_exists(product_name)?;
+    let product = Product::load(&product_name)?;
+    let signing_key = Product::load_signing_key(&product_name)?;
+
+    println!("Creating license for product: {}\n", product.name);
+
+    // Collect license info
+    let sub: String = Input::new()
+        .with_prompt("Licensee email/identifier")
+        .interact_text()?;
+
+    let has_expiry = Confirm::new()
+        .with_prompt("Set expiration date?")
+        .default(false)
+        .interact()?;
+
+    let exp = if has_expiry {
+        let date_str: String = Input::new()
+            .with_prompt("Expiration date (YYYY-MM-DD)")
+            .interact_text()?;
+        let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")?;
+        let datetime = date.and_hms_opt(23, 59, 59).unwrap();
+        Some(datetime.and_utc().timestamp() as u64)
+    } else {
+        None
+    };
+
+    // Select entitlements
+    let ent = if product.entitlements.is_empty() {
+        println!("Enter entitlements (empty line to finish):");
+        let mut entitlements = Vec::new();
+        loop {
+            let e: String = Input::new()
+                .with_prompt(format!("  Entitlement {}", entitlements.len() + 1))
+                .allow_empty(true)
+                .interact_text()?;
+            if e.is_empty() {
+                break;
+            }
+            entitlements.push(e);
+        }
+        entitlements
+    } else {
+        let selected = MultiSelect::new()
+            .with_prompt("Select entitlements")
+            .items(&product.entitlements)
+            .interact()?;
+        selected
+            .iter()
+            .map(|&i| product.entitlements[i].clone())
+            .collect()
+    };
+
+    // Optional metadata
+    let add_meta = Confirm::new()
+        .with_prompt("Add custom metadata?")
+        .default(false)
+        .interact()?;
+
+    let mut meta = HashMap::new();
+    if add_meta {
+        loop {
+            let key: String = Input::new()
+                .with_prompt("Metadata key (empty to finish)")
+                .allow_empty(true)
+                .interact_text()?;
+            if key.is_empty() {
+                break;
+            }
+            let value: String = Input::new()
+                .with_prompt(&format!("Value for '{}'", key))
+                .interact_text()?;
+            meta.insert(key, value);
+        }
+    }
+
+    // Create payload
+    let now = Utc::now().timestamp() as u64;
+    let payload = LicensePayload {
+        v: 1,
+        sub: sub.clone(),
+        iss: product.name.clone(),
+        iat: now,
+        exp,
+        ent,
+        meta,
+    };
+
+    // Sign payload
+    let payload_json = serde_json::to_string(&payload)?;
+    let signature = signing_key.sign(payload_json.as_bytes());
+
+    let license_file = LicenseFile {
+        payload: BASE64_STANDARD.encode(payload_json.as_bytes()),
+        sig: BASE64_STANDARD.encode(signature.to_bytes()),
+    };
+
+    let license_json = serde_json::to_string_pretty(&license_file)?;
+
+    // Save to licenses directory
+    let filename = format!("{}.lic", sub.replace('@', "_at_").replace('.', "_"));
+    let license_path = Product::licenses_dir(&product_name).join(&filename);
+
+    // Ensure licenses directory exists
+    fs::create_dir_all(Product::licenses_dir(&product_name))?;
+    fs::write(&license_path, &license_json)?;
+
+    println!("\n License created!\n");
+    println!("  Saved to: {}", Product::display_path(&license_path));
+    println!("\n--- License Preview ---");
+    println!("{}", serde_json::to_string_pretty(&payload)?);
+
+    Ok(())
 }
 
 fn license_list(_product: &str) -> anyhow::Result<()> {
