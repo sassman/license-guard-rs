@@ -90,6 +90,8 @@ mod error;
 mod license;
 mod verify;
 pub mod global;
+#[cfg(any(test, feature = "sign"))]
+pub mod sign;
 
 pub use error::LicenseError;
 pub use license::{LicenseFile, LicensePayload};
@@ -98,24 +100,16 @@ pub use verify::LicenseVerifier;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::{Signer, SigningKey};
+    use ed25519_dalek::SigningKey;
 
     fn create_test_keypair() -> (SigningKey, String) {
-        let signing_key = SigningKey::generate(&mut rand::rng());
+        let signing_key = SigningKey::generate(&mut rand::thread_rng());
         let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
         (signing_key, public_key_hex)
     }
 
     fn sign_payload(signing_key: &SigningKey, payload: &LicensePayload) -> LicenseFile {
-        use base64::prelude::*;
-        let payload_json = serde_json::to_string(payload).unwrap();
-        let payload_b64 = BASE64_STANDARD.encode(payload_json.as_bytes());
-        let signature = signing_key.sign(payload_json.as_bytes());
-        let sig_b64 = BASE64_STANDARD.encode(signature.to_bytes());
-        LicenseFile {
-            payload: payload_b64,
-            sig: sig_b64,
-        }
+        payload.sign(signing_key).unwrap()
     }
 
     #[test]
@@ -352,5 +346,30 @@ mod tests {
     fn test_from_base64_invalid() {
         let result = LicenseFile::from_base64("not-valid-base64!!!");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sign_and_verify_roundtrip() {
+        let (signing_key, public_key_hex) = create_test_keypair();
+        let verifier = LicenseVerifier::from_hex(&public_key_hex).unwrap();
+
+        let payload = LicensePayload {
+            v: 1,
+            sub: "sign-test@example.com".into(),
+            iss: "test-app".into(),
+            iat: 1706400000,
+            exp: None,
+            ent: vec!["premium".into()],
+            meta: Default::default(),
+        };
+
+        // Use the new sign() method
+        let license_file = payload.sign(&signing_key).unwrap();
+
+        // Verify it works with the verifier
+        let license_json = serde_json::to_string(&license_file).unwrap();
+        let result = verifier.verify(&license_json).unwrap();
+        assert_eq!(result.sub, "sign-test@example.com");
+        assert_eq!(result.ent, vec!["premium"]);
     }
 }

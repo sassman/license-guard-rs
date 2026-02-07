@@ -26,6 +26,10 @@ base64.workspace = true
 hex.workspace = true
 serde_json.workspace = true
 
+[features]
+default = []
+sign = []
+
 [[example]]
 name = "integration"
 path = "examples/integration.rs"

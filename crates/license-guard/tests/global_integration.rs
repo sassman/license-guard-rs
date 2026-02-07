@@ -17,7 +17,7 @@ fn make_license(sk: &SigningKey, payload: &LicensePayload) -> String {
 
 #[test]
 fn global_init_activate_check_deactivate() {
-    let sk = SigningKey::generate(&mut rand::rng());
+    let sk = SigningKey::generate(&mut rand::thread_rng());
     let pk_hex = hex::encode(sk.verifying_key().to_bytes());
 
     global::init(&pk_hex).unwrap();
