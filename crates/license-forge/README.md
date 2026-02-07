@@ -2,71 +2,101 @@
 
 CLI tool for generating Ed25519-signed software licenses.
 
+## Quick Start
+
+```bash
+# Create your first license (auto-creates default product)
+license-forge license add
+
+# List your products
+license-forge product list
+
+# View product details and public key
+license-forge show
+```
+
 ## Commands
 
-### Generate Keypair
+### Products
 
 ```bash
-license-forge keygen -o ./keys
+# Create a new product
+license-forge product add myproduct
+
+# List all products
+license-forge product list
+
+# Remove a product
+license-forge product remove myproduct
 ```
 
-Creates `license.sk` (private, keep secret) and `license.pk` (public, embed in app).
-
-### Generate License
+### Licenses
 
 ```bash
-license-forge generate -k ./keys/license.sk
+# Generate a license (uses default product)
+license-forge license add
+
+# Generate a license for specific product
+license-forge -p myproduct license add
+
+# List all licenses
+license-forge license list
+
+# Expire a license
+license-forge license expire user_at_example
+
+# Renew a license
+license-forge license renew user_at_example
+
+# Verify a license
+license-forge verify user_at_example.lic
 ```
 
-First run prompts for:
-- Product identifier
-- Entitlements (define your own list)
-- Option to save as profile
-
-Subsequent runs offer to load saved profiles.
-
-### Load Specific Profile
+### Info
 
 ```bash
-license-forge generate -k ./keys/license.sk -p myproduct
+# Show product details, keys, and license count
+license-forge show
+
+# Show for specific product
+license-forge -p myproduct show
 ```
 
-### List Profiles
+## Directory Structure
+
+Products are stored in `~/.config/license-forge/`:
+
+```
+~/.config/license-forge/
+├── default/
+│   ├── product.toml        # Product config
+│   ├── license.sk          # Private key (keep secret!)
+│   ├── license.pk          # Public key (embed in app)
+│   └── licenses/
+│       └── user_at_example.lic
+└── myproduct/
+    └── ...
+```
+
+## Shell Completions
 
 ```bash
-license-forge profiles
-```
+# Bash
+license-forge completions bash >> ~/.bashrc
 
-### Verify License
+# Zsh
+license-forge completions zsh >> ~/.zshrc
 
-```bash
-license-forge verify -k ./keys/license.pk -l user.lic
-```
-
-### Show Public Key
-
-```bash
-license-forge show-public-key -k ./keys/license.sk
-```
-
-## Profiles
-
-Profiles store product name and available entitlements for reuse.
-
-Location: `~/.config/license-forge/profiles/` (macOS/Linux)
-
-Example profile (`myproduct.toml`):
-```toml
-product = "myproduct"
-entitlements = ["basic", "pro", "enterprise"]
+# Fish
+license-forge completions fish > ~/.config/fish/completions/license-forge.fish
 ```
 
 ## Workflow
 
-1. **Once**: `keygen` to create keypair
-2. **First license**: `generate` creates profile interactively
-3. **Next licenses**: `generate -p myproduct` loads saved profile
-4. **In app**: Embed public key, validate with `license-guard`
+1. **First license**: `license-forge license add` — creates default product interactively
+2. **Additional products**: `license-forge product add myproduct`
+3. **In your app**: Embed the public key from `license-forge show`
+4. **Validate**: Use `license-guard` crate in your app
 
 ## License
 
