@@ -98,7 +98,7 @@ impl Product {
     }
 
     /// Format path with ~ for display
-    pub fn display_path(path: &PathBuf) -> String {
+    pub fn display_path(path: &std::path::Path) -> String {
         if let Some(home) = dirs::home_dir() {
             if let Ok(suffix) = path.strip_prefix(&home) {
                 return format!("~/{}", suffix.display());

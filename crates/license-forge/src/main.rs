@@ -119,23 +119,21 @@ fn product_add(name: Option<String>) -> anyhow::Result<()> {
     };
 
     // Check if already exists
-    if Product::exists(&product_name) {
-        if Product::has_keys(&product_name) {
-            let replace = Confirm::new()
-                .with_prompt(format!(
-                    "Product '{}' already has keys. Replace them? (old keys will be backed up)",
-                    product_name
-                ))
-                .default(false)
-                .interact()?;
+    if Product::exists(&product_name) && Product::has_keys(&product_name) {
+        let replace = Confirm::new()
+            .with_prompt(format!(
+                "Product '{}' already has keys. Replace them? (old keys will be backed up)",
+                product_name
+            ))
+            .default(false)
+            .interact()?;
 
-            if !replace {
-                println!("Aborted.");
-                return Ok(());
-            }
-            Product::backup_keys(&product_name)?;
-            println!("Existing keys backed up.\n");
+        if !replace {
+            println!("Aborted.");
+            return Ok(());
         }
+        Product::backup_keys(&product_name)?;
+        println!("Existing keys backed up.\n");
     }
 
     println!("\nConfiguring product '{}'...\n", product_name);
@@ -212,7 +210,11 @@ fn product_list() -> anyhow::Result<()> {
     for name in products {
         let dir = Product::dir(&name);
         if let Ok(product) = Product::load(&name) {
-            let key_status = if Product::has_keys(&name) { "✓" } else { "✗" };
+            let key_status = if Product::has_keys(&name) {
+                "✓"
+            } else {
+                "✗"
+            };
             let license_count = count_licenses(&name);
             println!("  {} [{}]", name, key_status);
             println!("    Name: {}", product.name);
@@ -402,7 +404,7 @@ fn license_add(product_name: &str) -> anyhow::Result<()> {
                 break;
             }
             let value: String = Input::new()
-                .with_prompt(&format!("Value for '{}'", key))
+                .with_prompt(format!("Value for '{}'", key))
                 .interact_text()?;
             meta.insert(key, value);
         }
@@ -503,7 +505,7 @@ fn license_list(product_name: &str) -> anyhow::Result<()> {
                         };
                         let exp_str = payload
                             .exp
-                            .map(|e| format_timestamp(e))
+                            .map(format_timestamp)
                             .unwrap_or_else(|| "never".to_string());
 
                         println!("  {}{}", filename, status);
