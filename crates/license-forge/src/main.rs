@@ -68,7 +68,20 @@ enum ProductCommands {
 #[derive(Subcommand)]
 enum LicenseCommands {
     /// Generate a new license
-    Add,
+    Add {
+        /// Licensee email/identifier (skips interactive prompt)
+        #[arg(long)]
+        sub: Option<String>,
+        /// Expiration date as YYYY-MM-DD (skips interactive prompt)
+        #[arg(long)]
+        exp: Option<String>,
+        /// Comma-separated entitlements (skips interactive prompt)
+        #[arg(long)]
+        ent: Option<String>,
+        /// Comma-separated key=value metadata pairs (skips interactive prompt)
+        #[arg(long)]
+        meta: Option<String>,
+    },
     /// List all licenses for the product
     List,
     /// Expire a license (sets expiration to now)
@@ -93,7 +106,12 @@ fn main() -> anyhow::Result<()> {
             ProductCommands::Remove { name } => product_remove(&name),
         },
         Commands::License { action } => match action {
-            LicenseCommands::Add => license_add(&cli.product),
+            LicenseCommands::Add {
+                sub,
+                exp,
+                ent,
+                meta,
+            } => license_add(&cli.product, sub, exp, ent, meta),
             LicenseCommands::List => license_list(&cli.product),
             LicenseCommands::Expire { license } => license_expire(&cli.product, &license),
             LicenseCommands::Renew { license } => license_renew(&cli.product, &license),
@@ -387,31 +405,75 @@ fn prompt_expiration_date() -> anyhow::Result<u64> {
     Ok(datetime.and_utc().timestamp() as u64)
 }
 
-fn license_add(product_name: &str) -> anyhow::Result<()> {
+/// Parse a YYYY-MM-DD date string into a Unix timestamp (end of day UTC).
+fn parse_expiration_date(date_str: &str) -> anyhow::Result<u64> {
+    let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|e| anyhow::anyhow!("Invalid date '{}': {} (expected YYYY-MM-DD)", date_str, e))?;
+    let datetime = date
+        .and_hms_opt(23, 59, 59)
+        .ok_or_else(|| anyhow::anyhow!("Invalid date '{}'", date_str))?;
+    Ok(datetime.and_utc().timestamp() as u64)
+}
+
+/// Parse comma-separated key=value pairs into a HashMap.
+fn parse_meta(meta_str: &str) -> anyhow::Result<HashMap<String, String>> {
+    let mut map = HashMap::new();
+    for pair in meta_str.split(',') {
+        let pair = pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = pair
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("Invalid metadata '{}': expected key=value", pair))?;
+        map.insert(key.trim().to_string(), value.trim().to_string());
+    }
+    Ok(map)
+}
+
+fn license_add(
+    product_name: &str,
+    cli_sub: Option<String>,
+    cli_exp: Option<String>,
+    cli_ent: Option<String>,
+    cli_meta: Option<String>,
+) -> anyhow::Result<()> {
     let product_name = ensure_product_exists(product_name)?;
     let product = Product::load(&product_name)?;
     let signing_key = Product::load_signing_key(&product_name)?;
 
     println!("Creating license for product: {}\n", product.name);
 
-    // Collect license info
-    let sub: String = Input::new()
-        .with_prompt("Licensee email/identifier")
-        .interact_text()?;
-
-    let has_expiry = Confirm::new()
-        .with_prompt("Set expiration date?")
-        .default(false)
-        .interact()?;
-
-    let exp = if has_expiry {
-        Some(prompt_expiration_date()?)
+    // Collect license info — use CLI args when provided, otherwise prompt
+    let sub = if let Some(sub) = cli_sub {
+        sub
     } else {
-        None
+        Input::new()
+            .with_prompt("Licensee email/identifier")
+            .interact_text()?
     };
 
-    // Select entitlements
-    let ent = if product.entitlements.is_empty() {
+    let exp = if let Some(exp_str) = cli_exp {
+        Some(parse_expiration_date(&exp_str)?)
+    } else {
+        let has_expiry = Confirm::new()
+            .with_prompt("Set expiration date?")
+            .default(false)
+            .interact()?;
+        if has_expiry {
+            Some(prompt_expiration_date()?)
+        } else {
+            None
+        }
+    };
+
+    let ent = if let Some(ent_str) = cli_ent {
+        ent_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if product.entitlements.is_empty() {
         println!("Enter entitlements (empty line to finish):");
         let mut entitlements = Vec::new();
         loop {
@@ -436,28 +498,32 @@ fn license_add(product_name: &str) -> anyhow::Result<()> {
             .collect()
     };
 
-    // Optional metadata
-    let add_meta = Confirm::new()
-        .with_prompt("Add custom metadata?")
-        .default(false)
-        .interact()?;
+    let meta = if let Some(meta_str) = cli_meta {
+        parse_meta(&meta_str)?
+    } else {
+        let add_meta = Confirm::new()
+            .with_prompt("Add custom metadata?")
+            .default(false)
+            .interact()?;
 
-    let mut meta = HashMap::new();
-    if add_meta {
-        loop {
-            let key: String = Input::new()
-                .with_prompt("Metadata key (empty to finish)")
-                .allow_empty(true)
-                .interact_text()?;
-            if key.is_empty() {
-                break;
+        let mut meta = HashMap::new();
+        if add_meta {
+            loop {
+                let key: String = Input::new()
+                    .with_prompt("Metadata key (empty to finish)")
+                    .allow_empty(true)
+                    .interact_text()?;
+                if key.is_empty() {
+                    break;
+                }
+                let value: String = Input::new()
+                    .with_prompt(format!("Value for '{}'", key))
+                    .interact_text()?;
+                meta.insert(key, value);
             }
-            let value: String = Input::new()
-                .with_prompt(format!("Value for '{}'", key))
-                .interact_text()?;
-            meta.insert(key, value);
         }
-    }
+        meta
+    };
 
     // Create payload
     let now = Utc::now().timestamp() as u64;
