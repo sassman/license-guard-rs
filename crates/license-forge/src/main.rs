@@ -1,9 +1,9 @@
 mod product;
 
 use base64::prelude::*;
-use chrono::{NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use clap::{CommandFactory, Parser, Subcommand};
-use dialoguer::{Confirm, Input, MultiSelect};
+use dialoguer::{Confirm, Input, MultiSelect, Select};
 use ed25519_dalek::Signer;
 use license_guard::{LicenseFile, LicensePayload};
 use product::Product;
@@ -333,6 +333,44 @@ fn ensure_product_exists(product_name: &str) -> anyhow::Result<String> {
     Ok("default".to_string())
 }
 
+/// Prompt user for expiration date with predefined options
+fn prompt_expiration_date() -> anyhow::Result<u64> {
+    let now = Utc::now();
+    let current_year = now.year();
+    let end_of_year = format!("End of {}", current_year);
+
+    let options = vec![
+        "+1 Month",
+        "+6 Months",
+        "+1 Year",
+        &end_of_year,
+        "Custom",
+    ];
+
+    let selection = Select::new()
+        .with_prompt("Expiration")
+        .items(&options)
+        .default(0)
+        .interact()?;
+
+    let date = match selection {
+        0 => now.date_naive() + chrono::Months::new(1),
+        1 => now.date_naive() + chrono::Months::new(6),
+        2 => now.date_naive() + chrono::Months::new(12),
+        3 => NaiveDate::from_ymd_opt(current_year, 12, 31).unwrap(),
+        4 => {
+            let date_str: String = Input::new()
+                .with_prompt("Expiration date (YYYY-MM-DD)")
+                .interact_text()?;
+            NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")?
+        }
+        _ => unreachable!(),
+    };
+
+    let datetime = date.and_hms_opt(23, 59, 59).unwrap();
+    Ok(datetime.and_utc().timestamp() as u64)
+}
+
 fn license_add(product_name: &str) -> anyhow::Result<()> {
     let product_name = ensure_product_exists(product_name)?;
     let product = Product::load(&product_name)?;
@@ -351,12 +389,7 @@ fn license_add(product_name: &str) -> anyhow::Result<()> {
         .interact()?;
 
     let exp = if has_expiry {
-        let date_str: String = Input::new()
-            .with_prompt("Expiration date (YYYY-MM-DD)")
-            .interact_text()?;
-        let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")?;
-        let datetime = date.and_hms_opt(23, 59, 59).unwrap();
-        Some(datetime.and_utc().timestamp() as u64)
+        Some(prompt_expiration_date()?)
     } else {
         None
     };
@@ -622,13 +655,7 @@ fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
 
     println!("Renewing license: {}\n", license_name);
 
-    let date_str: String = Input::new()
-        .with_prompt("New expiration date (YYYY-MM-DD)")
-        .interact_text()?;
-
-    let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")?;
-    let datetime = date.and_hms_opt(23, 59, 59).unwrap();
-    let new_exp = datetime.and_utc().timestamp() as u64;
+    let new_exp = prompt_expiration_date()?;
 
     backup_license(&product_name, license_name)?;
 
@@ -637,7 +664,7 @@ fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
         Ok(())
     })?;
 
-    println!("\n License renewed until {}.", date_str);
+    println!("\n License renewed until {}.", format_timestamp(new_exp));
     Ok(())
 }
 
