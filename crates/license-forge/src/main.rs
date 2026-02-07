@@ -189,11 +189,82 @@ fn product_add(name: Option<String>) -> anyhow::Result<()> {
 }
 
 fn product_list() -> anyhow::Result<()> {
-    todo!("product_list")
+    let products = Product::list();
+
+    if products.is_empty() {
+        println!("No products configured.");
+        println!("\nCreate one with: license-forge product add");
+        return Ok(());
+    }
+
+    println!("Products:\n");
+    for name in products {
+        let dir = Product::dir(&name);
+        if let Ok(product) = Product::load(&name) {
+            let key_status = if Product::has_keys(&name) { "✓" } else { "✗" };
+            let license_count = count_licenses(&name);
+            println!("  {} [{}]", name, key_status);
+            println!("    Name: {}", product.name);
+            println!("    Entitlements: {:?}", product.entitlements);
+            println!("    Licenses: {}", license_count);
+            println!("    Path: {}", Product::display_path(&dir));
+            println!();
+        } else {
+            println!("  {} (error loading)", name);
+            println!("    Path: {}\n", Product::display_path(&dir));
+        }
+    }
+
+    Ok(())
 }
 
-fn product_remove(_name: &str) -> anyhow::Result<()> {
-    todo!("product_remove")
+fn count_licenses(product_name: &str) -> usize {
+    let dir = Product::licenses_dir(product_name);
+    if !dir.exists() {
+        return 0;
+    }
+    fs::read_dir(dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == "lic")
+                        .unwrap_or(false)
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn product_remove(name: &str) -> anyhow::Result<()> {
+    if !Product::exists(name) {
+        anyhow::bail!("Product '{}' not found", name);
+    }
+
+    let license_count = count_licenses(name);
+    let warning = if license_count > 0 {
+        format!(" This will delete {} license(s)!", license_count)
+    } else {
+        String::new()
+    };
+
+    let confirm = Confirm::new()
+        .with_prompt(format!("Remove product '{}'?{}", name, warning))
+        .default(false)
+        .interact()?;
+
+    if !confirm {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    Product::remove(name)?;
+    println!("Product '{}' removed.", name);
+
+    Ok(())
 }
 
 fn license_add(_product: &str) -> anyhow::Result<()> {
