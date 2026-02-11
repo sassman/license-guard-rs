@@ -146,7 +146,7 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
 
     fn test_keypair() -> (SigningKey, String) {
-        let sk = SigningKey::generate(&mut rand::thread_rng());
+        let sk = SigningKey::generate(&mut rand::rng());
         let pk_hex = hex::encode(sk.verifying_key().to_bytes());
         (sk, pk_hex)
     }

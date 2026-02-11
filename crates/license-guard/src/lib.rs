@@ -103,7 +103,7 @@ mod tests {
     use ed25519_dalek::SigningKey;
 
     fn create_test_keypair() -> (SigningKey, String) {
-        let signing_key = SigningKey::generate(&mut rand::thread_rng());
+        let signing_key = SigningKey::generate(&mut rand::rng());
         let public_key_hex = hex::encode(signing_key.verifying_key().to_bytes());
         (signing_key, public_key_hex)
     }
