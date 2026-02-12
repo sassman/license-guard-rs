@@ -87,11 +87,11 @@
 //! for a full walkthrough.
 
 mod error;
-mod license;
-mod verify;
 pub mod global;
+mod license;
 #[cfg(any(test, feature = "sign"))]
 pub mod sign;
+mod verify;
 
 pub use error::LicenseError;
 pub use license::{LicenseFile, LicensePayload};

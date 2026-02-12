@@ -48,8 +48,8 @@ pub struct LicenseVerifier {
 impl LicenseVerifier {
     /// Create from hex-encoded public key.
     pub fn from_hex(hex_key: &str) -> Result<Self, LicenseError> {
-        let bytes = hex::decode(hex_key)
-            .map_err(|e| LicenseError::InvalidPublicKey(e.to_string()))?;
+        let bytes =
+            hex::decode(hex_key).map_err(|e| LicenseError::InvalidPublicKey(e.to_string()))?;
         Self::from_bytes(&bytes)
     }
 

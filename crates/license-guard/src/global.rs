@@ -14,8 +14,8 @@
 //! For multiple products or testing, use [`LicenseVerifier`] directly,
 //! or create a [`LicenseState`] instance for testable non-global usage.
 
-use std::sync::{OnceLock, RwLock};
 use crate::{LicenseError, LicensePayload, LicenseVerifier};
+use std::sync::{OnceLock, RwLock};
 
 /// Non-global license state for testable usage and multi-instance scenarios.
 ///
@@ -58,7 +58,9 @@ impl LicenseState {
 
     /// Check if an entitlement is present.
     pub fn has(&self, entitlement: &str) -> bool {
-        self.license.read().unwrap()
+        self.license
+            .read()
+            .unwrap()
             .as_ref()
             .map(|p| p.has_entitlement(entitlement))
             .unwrap_or(false)
@@ -71,9 +73,7 @@ impl LicenseState {
 
     /// Get licensee identifier if licensed.
     pub fn licensee(&self) -> Option<String> {
-        self.license.read().unwrap()
-            .as_ref()
-            .map(|p| p.sub.clone())
+        self.license.read().unwrap().as_ref().map(|p| p.sub.clone())
     }
 
     /// Get full license payload if licensed.
@@ -89,17 +89,17 @@ impl LicenseState {
 static STATE: OnceLock<LicenseState> = OnceLock::new();
 
 fn state() -> Result<&'static LicenseState, LicenseError> {
-    STATE.get()
-        .ok_or_else(|| LicenseError::InvalidFormat(
-            "license system not initialized - call init() first".into()
-        ))
+    STATE.get().ok_or_else(|| {
+        LicenseError::InvalidFormat("license system not initialized - call init() first".into())
+    })
 }
 
 /// Initialize with your public key. Call once at startup.
 pub fn init(public_key_hex: &str) -> Result<(), LicenseError> {
     let s = LicenseState::new(public_key_hex)?;
-    STATE.set(s).map_err(|_|
-        LicenseError::InvalidFormat("license system already initialized".into()))?;
+    STATE
+        .set(s)
+        .map_err(|_| LicenseError::InvalidFormat("license system already initialized".into()))?;
     Ok(())
 }
 

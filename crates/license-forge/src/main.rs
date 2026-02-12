@@ -372,13 +372,7 @@ fn prompt_expiration_date() -> anyhow::Result<u64> {
     let current_year = now.year();
     let end_of_year = format!("End of {}", current_year);
 
-    let options = vec![
-        "+1 Month",
-        "+6 Months",
-        "+1 Year",
-        &end_of_year,
-        "Custom",
-    ];
+    let options = vec!["+1 Month", "+6 Months", "+1 Year", &end_of_year, "Custom"];
 
     let selection = Select::new()
         .with_prompt("Expiration")

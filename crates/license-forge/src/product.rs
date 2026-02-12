@@ -23,7 +23,7 @@ impl Product {
             .join("license-forge")
     }
 
-    /// Directory for a specific product: ~/.config/license-forge/<product>/
+    /// Directory for a specific product: `~/.config/license-forge/<product>/`
     pub fn dir(product_name: &str) -> PathBuf {
         Self::base_dir().join(product_name)
     }
@@ -142,8 +142,10 @@ impl Product {
         }
 
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let priv_backup = Self::dir(product_name).join(format!("{}.{}.bak", Self::PRIVATE_KEY_FILE, timestamp));
-        let pub_backup = Self::dir(product_name).join(format!("{}.{}.bak", Self::PUBLIC_KEY_FILE, timestamp));
+        let priv_backup =
+            Self::dir(product_name).join(format!("{}.{}.bak", Self::PRIVATE_KEY_FILE, timestamp));
+        let pub_backup =
+            Self::dir(product_name).join(format!("{}.{}.bak", Self::PUBLIC_KEY_FILE, timestamp));
 
         fs::copy(&priv_path, &priv_backup)?;
         if pub_path.exists() {
