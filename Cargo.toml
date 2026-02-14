@@ -27,4 +27,4 @@ dialoguer = "0.12"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
-dirs = "6"
+dirs-lite = { version = "1", features = ["favor-xdg-style"] }

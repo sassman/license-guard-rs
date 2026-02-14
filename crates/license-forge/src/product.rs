@@ -18,7 +18,7 @@ impl Product {
 
     /// Base directory for all products: ~/.config/license-forge/
     pub fn base_dir() -> PathBuf {
-        dirs::config_dir()
+        dirs_lite::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("license-forge")
     }
@@ -101,12 +101,47 @@ impl Product {
 
     /// Format path with ~ for display
     pub fn display_path(path: &std::path::Path) -> String {
-        if let Some(home) = dirs::home_dir() {
+        #[allow(deprecated)]
+        if let Some(home) = std::env::home_dir() {
             if let Ok(suffix) = path.strip_prefix(&home) {
                 return format!("~/{}", suffix.display());
             }
         }
         path.display().to_string()
+    }
+
+    /// Migrate data from the legacy macOS location (~/Library/Application Support/license-forge)
+    /// to the XDG-style location (~/.config/license-forge). No-op if the legacy dir doesn't exist
+    /// or the new dir already has data.
+    pub fn migrate_legacy_dir() {
+        #[allow(deprecated)]
+        let Some(home) = std::env::home_dir() else {
+            return;
+        };
+
+        let legacy = home.join("Library/Application Support/license-forge");
+        let target = Self::base_dir();
+
+        // Only migrate if legacy exists and target doesn't
+        if !legacy.exists() || target.exists() {
+            return;
+        }
+
+        if let Err(e) = fs::rename(&legacy, &target) {
+            eprintln!(
+                "Note: could not migrate {} → {}: {}",
+                Self::display_path(&legacy),
+                Self::display_path(&target),
+                e
+            );
+            return;
+        }
+
+        eprintln!(
+            "Migrated config: {} → {}",
+            Self::display_path(&legacy),
+            Self::display_path(&target),
+        );
     }
 
     /// Generate and save a new keypair for a product

@@ -101,6 +101,7 @@ enum LicenseCommands {
 }
 
 fn main() -> anyhow::Result<()> {
+    Product::migrate_legacy_dir();
     let cli = Cli::parse();
 
     match cli.command {
