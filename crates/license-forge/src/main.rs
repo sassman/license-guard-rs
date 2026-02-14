@@ -93,6 +93,11 @@ enum LicenseCommands {
         /// License filename
         license: String,
     },
+    /// View a license with its path and base64-encoded content
+    View {
+        /// License filename
+        license: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -114,6 +119,7 @@ fn main() -> anyhow::Result<()> {
             LicenseCommands::List => license_list(&cli.product),
             LicenseCommands::Expire { license } => license_expire(&cli.product, &license),
             LicenseCommands::Renew { license } => license_renew(&cli.product, &license),
+            LicenseCommands::View { license } => license_view(&cli.product, &license),
         },
         Commands::Show => show(&cli.product),
         Commands::Verify { license } => verify(&cli.product, &license),
@@ -727,6 +733,39 @@ fn license_renew(product_name: &str, license_name: &str) -> anyhow::Result<()> {
     })?;
 
     println!("\n License renewed until {}.", format_timestamp(new_exp));
+    Ok(())
+}
+
+fn license_view(product_name: &str, license_name: &str) -> anyhow::Result<()> {
+    let license_path = resolve_license_path(product_name, license_name)?;
+    let license_data = fs::read_to_string(&license_path)?;
+
+    // Decode payload to show details
+    let license_file: LicenseFile = serde_json::from_str(&license_data)?;
+    let payload_bytes = BASE64_STANDARD.decode(&license_file.payload)?;
+    let payload: LicensePayload = serde_json::from_slice(&payload_bytes)?;
+
+    // Base64-encode the entire license file JSON
+    let base64_encoded = BASE64_STANDARD.encode(license_data.as_bytes());
+
+    println!("License: {}\n", license_path.file_name().unwrap_or_default().to_string_lossy());
+    println!("  Path:         {}", Product::display_path(&license_path));
+    println!("  Licensee:     {}", payload.sub);
+    println!("  Product:      {}", payload.iss);
+    println!("  Issued:       {}", format_timestamp(payload.iat));
+    if let Some(exp) = payload.exp {
+        println!("  Expires:      {}", format_timestamp(exp));
+    } else {
+        println!("  Expires:      Never (perpetual)");
+    }
+    if !payload.ent.is_empty() {
+        println!("  Entitlements: {:?}", payload.ent);
+    }
+    if !payload.meta.is_empty() {
+        println!("  Metadata:     {:?}", payload.meta);
+    }
+    println!("\nBase64 (for distribution):\n{}", base64_encoded);
+
     Ok(())
 }
 
